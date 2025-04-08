@@ -1,5 +1,5 @@
-import multiprocessing
-
+import threading
+from loading import ft_progress
 import random
 import copy
 
@@ -35,23 +35,13 @@ class GeneticAlgorithm:
             self.population.append(individual)
 
     def sort_population(self):
-        # Perform parallel fitness evaluation
-        fitness_scores = self.run_parallel_evaluation(self.population)
 
-        # Sort population by fitness
-        self.population = [
-            pop_fit[0]
-            for pop_fit in sorted(
-                zip(self.population, fitness_scores),
-                key=lambda x: x[1],
-                reverse=True,
-            )
-        ]
+        self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
+        self.population = self.population[: self.population_size]
 
     def parent_selection(self):
         """Select the best individuals from the population."""
         selection_point = int(self.population_size * self.selection_rate)
-        elite_count = int(self.population_size * self.elite_rate)
 
         return self.population[:selection_point]
 
@@ -95,21 +85,11 @@ class GeneticAlgorithm:
                 mutated[i] = random.choice(self.genes)
         return mutated
 
-    def parallel_fitness(self, individual):
-        """Parallel fitness evaluation for an individual."""
-        return self.fitness_function(individual)
-
-    def run_parallel_evaluation(self, population):
-        """Evaluate the fitness of the population in parallel."""
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            fitness_scores = pool.map(self.parallel_fitness, population)
-        return fitness_scores
-
     def run(self, min_dna_length, max_dna_length):
         """Run the genetic algorithm."""
         self.init_population(min_dna_length, max_dna_length)
 
-        for _ in range(self.generations):
+        for _ in ft_progress(range(self.generations)):
             self.sort_population()
 
             parent_population = self.parent_selection()

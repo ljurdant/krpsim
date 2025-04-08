@@ -1,0 +1,24 @@
+# make_sec * 60 -> second: 60, clock:1
+# make_minute -> second: 0, minute: 1, clock:1
+
+# make_sec * 60 -> second: 60, minute:1, clock:1
+# make_minute -> second:0, minute: 2, clock:1
+
+
+# make_sec * 60 -> second: 0, minute:2, clock:1
+# make_minute -> second:0, minute:3, clock:1
+
+# make_sec * 365 -> second:365, minute:2, clock: 1
+
+# start_dream -> second:365, minute:2, dream: 1, clock: 0
+
+# start_dream_2 -> second:365, minute:1, dream: 2, clock: 0
+# start_dream_2 -> second:365, minute:0, dream:3, clock: 0
+
+# dream_day * 365 -> second:0, minute:0, hour:0, day:365,  dream:3, clock: 0
+
+# make_year -> second:0, minute:0, hour:0, day:0, year:1, dream:3, clock: 0
+
+# end_dream -> second:0, minute:0, hour:0, day:0, year:1, dream:0, clock: 1
+
+# ect.
