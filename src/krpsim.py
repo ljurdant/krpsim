@@ -1,8 +1,12 @@
+#!/usr/bin/env python3
+
 from _types import Process
 from typing import List
 from genetic_algorithm import GeneticAlgorithm
 from parser import parse
 import sys
+
+from matplotlib import pyplot as plt
 
 
 def do_process(
@@ -14,7 +18,7 @@ def do_process(
 
     for resource, amount in process["need"].items():
         if stock.get(resource, 0) < amount:
-            return process["time"]
+            return process["time"], False
 
     # Update the stock
     for resource, amount in process["need"].items():
@@ -24,7 +28,7 @@ def do_process(
     for resource, amount in process["result"].items():
         stock[resource] = stock.get(resource, 0) + amount
 
-    return process["time"]
+    return process["time"], True
 
 
 def get_score(
@@ -33,9 +37,16 @@ def get_score(
     stop_index = individual.index("stop") if "stop" in individual else -1
     if stop_index != -1:
         individual = individual[:stop_index]
-    total_time = sum(
-        do_process(process_name, processes, stock) for process_name in individual
-    )
+
+    total_time = 0
+    failed_steps = 0
+
+    for process_name in individual:
+        time_taken, success = do_process(process_name, processes, stock)
+        total_time += time_taken
+        if not success:
+            failed_steps += 1
+
     target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
 
     if "time" in optimize:
@@ -52,7 +63,6 @@ if __name__ == "__main__":
 
     config_file = sys.argv[1]
     stock, processes, optimize = parse(config_file)
-    print(stock, processes, optimize)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -61,9 +71,16 @@ if __name__ == "__main__":
         return get_score(individual, processes_copy, stock_copy, optimize_copy)
 
     ga = GeneticAlgorithm(
-        genes=list(processes.keys()), fitness_function=fitness_function
+        population_size=200,
+        crossover_rate=0.9,
+        elite_rate=0.05,
+        selection_rate=0.6,
+        mutation_rate=0.02,
+        genes=list(processes.keys()),
+        fitness_function=fitness_function,
+        generations=100,
     )
-    best = ga.run(dna_length=20)
+    best = ga.run(dna_length=100)
 
     print("Best fitness:", fitness_function(best))
 

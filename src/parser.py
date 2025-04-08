@@ -103,6 +103,11 @@ def parse(filepath):
                     "result": results_dict,
                     "time": delay,
                 }
+                processes["stop"] = {
+                    "need": {},
+                    "result": {},
+                    "time": 0,
+                }
             else:
                 # Otherwise, assume it's a stock line, e.g. "euro:10"
                 if ":" in line:
