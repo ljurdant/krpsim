@@ -31,6 +31,42 @@ def do_process(
     return process["time"], True
 
 
+# def compute_hierarchy(processes: dict[str, dict], root_weights=None):
+#     if root_weights is None:
+#         root_weights = {}
+
+#     resource_weights = {}
+
+#     def get_weight(resource):
+#         if resource in resource_weights:
+#             return resource_weights[resource]
+#         weight = 1.0  # base weight
+
+#         # Check which processes produce this resource
+#         producing_procs = [p for p in processes.values() if resource in p["result"]]
+
+#         for proc in producing_procs:
+#             time = proc["time"]
+#             for need_res, qty in proc["need"].items():
+#                 weight += get_weight(need_res) * qty
+#             weight += time  # more time = more value
+
+#         resource_weights[resource] = weight
+#         return weight
+
+#     # Start by computing weight for all result resources
+#     for proc in processes.values():
+#         for res in proc["result"]:
+#             get_weight(res)
+
+#     # Normalize
+#     max_weight = max(resource_weights.values())
+#     for res in resource_weights:
+#         resource_weights[res] /= max_weight
+
+#     return resource_weights
+
+
 def get_resource_hierarchy(
     processes: dict[str, Process], optimize: List[str]
 ) -> dict[str, List[str]]:
@@ -91,25 +127,26 @@ def get_score(
         individual = individual[:stop_index]
 
     total_time = 0
-    failed_steps = 0
+    valid_count = 0
     for process_name in individual:
         time_taken, success = do_process(process_name, processes, stock)
         total_time += time_taken
-        failed_steps += int(not success)
+        valid_count += int(success)
+        if not success:
+            break
 
     resources_count = sum(
-        ((stock.get(resource, 0) * hierarchy[resource]) - (failed_steps / 10)) / 100
-        for resource in stock.keys()
+        [stock.get(resource) * hierarchy.get(resource, 0) for resource in stock.keys()]
     )
-    target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
-    resources_count += target_resources_count
-
-    # ) + success_steps / 100
+    target_resources_count = sum(stock.get(resource, 0) for resource in optimize) + len(
+        stock
+    )
+    # resources_count += target_resources_count
 
     if "time" in optimize:
-        return resources_count / total_time if total_time > 0 else 0
+        return target_resources_count / total_time if total_time > 0 else 0
     else:
-        return resources_count
+        return target_resources_count + valid_count
 
 
 def get_stock_after_individual(
@@ -161,13 +198,15 @@ if __name__ == "__main__":
     stock, processes, optimize = parse(config_file)
 
     hierarchy = get_resource_hierarchy(processes, optimize)
+
     print("Resource hierarchy:", hierarchy)
-    min = 0
-    max = 0
-    for opt in optimize:
-        tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-        min = min + tmp_min
-        max = max + tmp_max
+
+    min = 1000
+    max = 1000
+    # for opt in optimize:
+    #     tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
+    #     min = min + tmp_min
+    #     max = max + tmp_max
 
     if max > 20000:
         max = 20000
@@ -181,14 +220,14 @@ if __name__ == "__main__":
         )
 
     ga = GeneticAlgorithm(
-        population_size=500,
+        population_size=200,
         crossover_rate=0.9,
         elite_rate=0.05,
         selection_rate=0.6,
         mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
-        generations=300,
+        generations=100,
     )
 
     best = ga.run(max_dna_length=max, min_dna_length=min)

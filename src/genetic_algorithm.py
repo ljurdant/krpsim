@@ -98,5 +98,6 @@ class GeneticAlgorithm:
             crossover_population = self.crossover_generation(parent_population)
 
             self.population = crossover_population + elite_population
+            # cleanup population
         self.sort_population()
         return self.population[0]  # Return the best individual
