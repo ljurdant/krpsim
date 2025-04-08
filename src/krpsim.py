@@ -15,6 +15,7 @@ def parse() -> tuple[dict[str, int], dict[str, Process], List[str]]:
             "result": {"armoire": 1},
             "time": 30,
         },
+        "stop": {"need": {}, "result": {}, "time": 0},
     }
     optimize = ["time", "armoire"]
 
@@ -46,6 +47,9 @@ def do_process(
 def get_score(
     individual: List[Process], processes, stock: dict[str, int], optimize: List[str]
 ) -> float:
+    stop_index = individual.index("stop") if "stop" in individual else -1
+    if stop_index != -1:
+        individual = individual[:stop_index]
     total_time = sum(
         do_process(process_name, processes, stock) for process_name in individual
     )
@@ -69,7 +73,7 @@ if __name__ == "__main__":
     ga = GeneticAlgorithm(
         genes=list(processes.keys()), fitness_function=fitness_function
     )
-    best = ga.run(dna_length=8)
+    best = ga.run(dna_length=20)
 
     print("Best fitness:", fitness_function(best))
 
