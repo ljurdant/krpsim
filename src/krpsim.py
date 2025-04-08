@@ -125,6 +125,32 @@ def get_stock_after_individual(
     return stock
 
 
+def get_min_max_gene_length(
+    min_length: int,
+    max_length: int,
+    processes: dict[str, Process],
+    opt: str,
+    stock: dict[str, int],
+) -> tuple[int, int]:
+    """Get the min and max gene length."""
+
+    if opt == "time":
+        return 0, 0
+    for process in processes.values():
+        if opt in process["result"]:
+            for resource, amount in process["need"].items():
+                if resource in stock:
+                    min_length += 1
+                    max_length *= amount
+                else:
+                    min_length, max_length = get_min_max_gene_length(
+                        min_length + 1, max_length * amount, processes, resource, stock
+                    )
+            break
+
+    return min_length, max_length
+
+
 if __name__ == "__main__":
 
     if len(sys.argv) < 2:
@@ -136,6 +162,15 @@ if __name__ == "__main__":
 
     hierarchy = get_resource_hierarchy(processes, optimize)
     print("Resource hierarchy:", hierarchy)
+    min = 0
+    max = 0
+    for opt in optimize:
+        tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
+        min = min + tmp_min
+        max = max + tmp_max
+
+    if max > 20000:
+        max = 20000
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -155,12 +190,11 @@ if __name__ == "__main__":
         fitness_function=fitness_function,
         generations=300,
     )
-    best = ga.run(dna_length=1000)
+
+    best = ga.run(max_dna_length=max, min_dna_length=min)
 
     print("Best fitness:", fitness_function(best))
-
     best = best[: best.index("stop")] if "stop" in best else best
-
     print("Best individual:", best, len(best))
     print(
         "Stock after best individual:",
