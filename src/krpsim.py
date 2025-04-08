@@ -18,7 +18,7 @@ def do_process(
 
     for resource, amount in process["need"].items():
         if stock.get(resource, 0) < amount:
-            return process["time"], False
+            return 0, False
 
     # Update the stock
     for resource, amount in process["need"].items():
@@ -122,9 +122,6 @@ def get_score(
     optimize: List[str],
     hierarchy: dict[str, float],
 ) -> float:
-    stop_index = individual.index("stop") if "stop" in individual else -1
-    if stop_index != -1:
-        individual = individual[:stop_index]
 
     total_time = 0
     valid_count = 0
@@ -138,23 +135,22 @@ def get_score(
     resources_count = sum(
         [stock.get(resource) * hierarchy.get(resource, 0) for resource in stock.keys()]
     )
-    target_resources_count = sum(stock.get(resource, 0) for resource in optimize) + len(
-        stock
-    )
+    target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
     # resources_count += target_resources_count
 
     if "time" in optimize:
         return target_resources_count / total_time if total_time > 0 else 0
     else:
-        return target_resources_count + valid_count
+        return (
+            target_resources_count * 5
+            + valid_count * 0.5
+            + len([resource for resource, amount in stock.items() if amount > 0]) * 0.2
+        )
 
 
 def get_stock_after_individual(
     individual: List[Process], processes, stock: dict[str, int], optimize: List[str]
 ) -> dict[str, int]:
-    stop_index = individual.index("stop") if "stop" in individual else -1
-    if stop_index != -1:
-        individual = individual[:stop_index]
 
     for process_name in individual:
         do_process(process_name, processes, stock)
@@ -201,15 +197,16 @@ if __name__ == "__main__":
 
     print("Resource hierarchy:", hierarchy)
 
-    min = 1000
-    max = 1000
-    # for opt in optimize:
-    #     tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-    #     min = min + tmp_min
-    #     max = max + tmp_max
+    min = 0
+    max = 0
+    for opt in optimize:
+        tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
+        min = min + tmp_min
+        max = max + tmp_max
 
-    if max > 20000:
-        max = 20000
+    # min = 1000
+    if max > 2000:
+        max = 2000
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -219,21 +216,41 @@ if __name__ == "__main__":
             individual, processes_copy, stock_copy, optimize_copy, hierarchy
         )
 
+    def get_valid_sequence(processes_names: List[str]) -> List[str]:
+        """Get a valid sequence of processes to do."""
+        stock_copy = stock.copy()
+        # Get the valid processes
+        valid_processes = []
+        for process_name in processes_names:
+            # Check if we have enough resources
+            if all(
+                stock_copy.get(resource, 0) >= amount
+                for resource, amount in processes[process_name]["need"].items()
+            ):
+                valid_processes.append(process_name)
+                # remove the resources from the stock_copy
+                for resource, amount in processes[process_name]["need"].items():
+                    stock_copy[resource] -= amount
+                # add the results to the stock_copy
+                for resource, amount in processes[process_name]["result"].items():
+                    stock_copy[resource] = stock_copy.get(resource, 0) + amount
+        return valid_processes
+
     ga = GeneticAlgorithm(
-        population_size=200,
-        crossover_rate=0.9,
+        population_size=5000,
+        crossover_rate=0.7,
         elite_rate=0.05,
-        selection_rate=0.6,
-        mutation_rate=0.02,
+        selection_rate=0.5,
+        mutation_rate=0.1,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
-        generations=100,
+        get_valid_sequence=get_valid_sequence,
+        generations=10,
     )
 
     best = ga.run(max_dna_length=max, min_dna_length=min)
 
     print("Best fitness:", fitness_function(best))
-    best = best[: best.index("stop")] if "stop" in best else best
     print("Best individual:", best, len(best))
     print(
         "Stock after best individual:",

@@ -12,6 +12,7 @@ class GeneticAlgorithm:
         crossover_rate=0.7,
         selection_rate=0.5,
         elite_rate=0.0,
+        get_valid_sequence=None,
         generations=100,
         genes=None,
         fitness_function=None,
@@ -22,6 +23,7 @@ class GeneticAlgorithm:
         self.crossover_rate = crossover_rate
         self.selection_rate = selection_rate
         self.generations = generations
+        self.get_valid_sequence = get_valid_sequence
         self.fitness_function = fitness_function
         self.elite_rate = elite_rate
         self.genes = genes if genes is not None else []
@@ -37,7 +39,6 @@ class GeneticAlgorithm:
     def sort_population(self):
 
         self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
-        self.population = self.population[: self.population_size]
 
     def parent_selection(self):
         """Select the best individuals from the population."""
@@ -53,12 +54,13 @@ class GeneticAlgorithm:
     def crossover(self, individual1, individual2):
         """Perform crossover between two selected individuals and return two children."""
         if random.random() < self.crossover_rate:
-            crossover_point = random.randint(1, len(individual1) - 1)
-            child1 = individual1[:crossover_point] + individual2[crossover_point:]
-            child2 = individual2[:crossover_point] + individual1[crossover_point:]
-            return child1, child2
+            crossover_point = random.randint(
+                1, min(len(individual1), len(individual2)) - 1
+            )
+            child = individual1[:crossover_point] + individual2[crossover_point:]
+            return child, True
         # No crossover: just clone the parents
-        return individual1[:], individual2[:]
+        return individual1[:], False
 
     def crossover_generation(self, population):
         """Create a new generation by crossover."""
@@ -69,17 +71,26 @@ class GeneticAlgorithm:
             parent1 = random.choice(population)
             parent2 = random.choice(population)
 
-            child1, child2 = self.crossover(parent1, parent2)
+            child, is_child = self.crossover(parent1, parent2)
 
-            crossover_population.append(self.mutate(child1))
-            if len(crossover_population) < target_size:
-                crossover_population.append(self.mutate(child2))
+            crossover_population.append(self.mutate(child) if is_child else child)
 
         return crossover_population
 
     def mutate(self, individual):
         """Mutate an individual by randomly changing its genes."""
         mutated = copy.deepcopy(individual)
+        # Chance to add or remove one gene (50-50) at random
+        if random.random() < self.mutation_rate:
+            if random.random() < 0.5 and len(mutated) > 1:
+                # remove a random gene
+                idx = random.randint(0, len(mutated) - 1)
+                del mutated[idx]
+            else:
+                # add a random gene
+                new_gene = random.choice(self.genes)
+                idx = random.randint(0, len(mutated))
+                mutated.insert(idx, new_gene)
         for i in range(len(mutated)):
             if random.random() < self.mutation_rate:
                 mutated[i] = random.choice(self.genes)
@@ -97,7 +108,24 @@ class GeneticAlgorithm:
 
             crossover_population = self.crossover_generation(parent_population)
 
+            # crossover_population.sort(
+            #     key=lambda x: self.fitness_function(x), reverse=True
+            # )
+            # print(
+            #     "Crossover population length: "
+            #     + str(self.fitness_function(crossover_population[0]))
+            # )
+            # print("Elite population length: " + str(crossover_population[0]))
             self.population = crossover_population + elite_population
+            for i in range(len(self.population)):
+                valid_sequence = self.get_valid_sequence(self.population[i])
+                self.population[i] = valid_sequence + [
+                    random.choice(self.genes)
+                    for _ in range(len(self.population[i]) - len(valid_sequence))
+                ]
+            for i in range(len(self.population)):
+                print(self.fitness_function(self.population[i]), end=", ")
+            print()
             # cleanup population
         self.sort_population()
         return self.population[0]  # Return the best individual
