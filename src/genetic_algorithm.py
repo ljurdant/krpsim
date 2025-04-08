@@ -26,12 +26,13 @@ class GeneticAlgorithm:
         self.elite_rate = elite_rate
         self.genes = genes if genes is not None else []
 
-    def init_population(self, dna_length):
+    def init_population(self, min_dna_length, max_dna_length):
         """Initialize the population with random genes."""
-        self.population = [
-            [random.choice(self.genes) for _ in range(dna_length)]
-            for _ in range(self.population_size)
-        ]
+        # Create a random population
+        for _ in range(self.population_size):
+            dna_length = random.randint(min_dna_length, max_dna_length)
+            individual = [random.choice(self.genes) for _ in range(dna_length)]
+            self.population.append(individual)
 
     def sort_population(self):
         # Perform parallel fitness evaluation
@@ -104,9 +105,9 @@ class GeneticAlgorithm:
             fitness_scores = pool.map(self.parallel_fitness, population)
         return fitness_scores
 
-    def run(self, dna_length):
+    def run(self, min_dna_length, max_dna_length):
         """Run the genetic algorithm."""
-        self.init_population(dna_length)
+        self.init_population(min_dna_length, max_dna_length)
 
         for _ in range(self.generations):
             self.sort_population()
