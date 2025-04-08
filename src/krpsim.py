@@ -27,10 +27,7 @@ def do_process(
     """Do a process and update the stock."""
     # Check if we have enough resources
     process = processes[process_name]
-    print(f"Doing process {process_name} with stock {stock}")
-    # print(f"Need {process['need']} for process {process_name}")
-    # print(f"Result {process['result']} for process {process_name}")
-    # print(f"Time {process['time']} for process {process_name}")
+
     for resource, amount in process["need"].items():
         if stock.get(resource, 0) < amount:
             return process["time"]
@@ -62,15 +59,17 @@ def get_score(
 
 if __name__ == "__main__":
     stock, processes, optimize = parse()
-    print("Stock:", stock)
 
     def fitness_function(individual):
-        return get_score(individual, processes, stock, optimize)
+        stock_copy = stock.copy()
+        processes_copy = processes.copy()
+        optimize_copy = optimize.copy()
+        return get_score(individual, processes_copy, stock_copy, optimize_copy)
 
     ga = GeneticAlgorithm(
         genes=list(processes.keys()), fitness_function=fitness_function
     )
-    best = ga.run(dna_length=6)
+    best = ga.run(dna_length=8)
 
     print("Best fitness:", fitness_function(best))
 

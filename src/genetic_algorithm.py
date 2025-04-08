@@ -4,10 +4,10 @@ import random
 class GeneticAlgorithm:
     def __init__(
         self,
-        population_size=2,
+        population_size=100,
         mutation_rate=0.01,
         crossover_rate=0.7,
-        generations=1,
+        generations=100,
         genes=None,
         fitness_function=None,
     ):
@@ -43,7 +43,8 @@ class GeneticAlgorithm:
     def crossover_generation(self, population):
         """Create a new generation by crossover."""
         crossover_population = []
-        for _ in range(self.population_size):
+        halfway_point = self.population_size // 2
+        for _ in range(self.population_size - halfway_point):
             parent1 = random.choice(population)
             parent2 = random.choice(population)
 
@@ -70,6 +71,6 @@ class GeneticAlgorithm:
             mutated_population = [
                 self.mutate(individual) for individual in crossover_population
             ]
-            self.population = mutated_population
+            self.population = mutated_population + good_population
 
         return self.selection()[0]
