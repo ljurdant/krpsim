@@ -31,8 +31,60 @@ def do_process(
     return process["time"], True
 
 
+def get_resource_hierarchy(
+    processes: dict[str, Process], optimize: List[str]
+) -> dict[str, List[str]]:
+
+    processes = processes.copy()
+    # Remove the stop process
+    optimize_resources = [resource for resource in optimize if resource != "time"]
+
+    resources = set(
+        [key for process in processes.values() for key in process["need"].keys()]
+        + [key for process in processes.values() for key in process["result"].keys()]
+    )
+    hierarchy_dict = {}
+    for resource in optimize_resources:
+        resources.remove(resource)
+        hierarchy_dict[resource] = 1
+
+    while len(resources):
+        tmp_resources = resources.copy()
+        for resource in tmp_resources:
+            needed = 0
+            b = False
+            for process in processes.values():
+                if (
+                    sum(
+                        key in hierarchy_dict.keys() for key in process["result"].keys()
+                    )
+                    > 0
+                ):
+                    if resource in process["need"]:
+                        needed = 0.5 * max(
+                            hierarchy_dict[key] if key in hierarchy_dict.keys() else 0
+                            for key in process["result"].keys()
+                        )
+                        b = True
+                        if resource in hierarchy_dict.keys():
+
+                            hierarchy_dict[resource] = max(
+                                hierarchy_dict[resource], needed
+                            )
+                        else:
+                            hierarchy_dict[resource] = needed
+            if b:
+                resources.remove(resource)
+
+    return hierarchy_dict
+
+
 def get_score(
-    individual: List[Process], processes, stock: dict[str, int], optimize: List[str]
+    individual: List[Process],
+    processes,
+    stock: dict[str, int],
+    optimize: List[str],
+    hierarchy: dict[str, float],
 ) -> float:
     stop_index = individual.index("stop") if "stop" in individual else -1
     if stop_index != -1:
@@ -40,19 +92,37 @@ def get_score(
 
     total_time = 0
     failed_steps = 0
-
     for process_name in individual:
         time_taken, success = do_process(process_name, processes, stock)
         total_time += time_taken
-        if not success:
-            failed_steps += 1
+        failed_steps += int(not success)
 
+    resources_count = sum(
+        ((stock.get(resource, 0) * hierarchy[resource]) - (failed_steps / 10)) / 100
+        for resource in stock.keys()
+    )
     target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
+    resources_count += target_resources_count
+
+    # ) + success_steps / 100
 
     if "time" in optimize:
-        return target_resources_count / total_time if total_time > 0 else 0
+        return resources_count / total_time if total_time > 0 else 0
     else:
-        return target_resources_count
+        return resources_count
+
+
+def get_stock_after_individual(
+    individual: List[Process], processes, stock: dict[str, int], optimize: List[str]
+) -> dict[str, int]:
+    stop_index = individual.index("stop") if "stop" in individual else -1
+    if stop_index != -1:
+        individual = individual[:stop_index]
+
+    for process_name in individual:
+        do_process(process_name, processes, stock)
+
+    return stock
 
 
 if __name__ == "__main__":
@@ -64,24 +134,35 @@ if __name__ == "__main__":
     config_file = sys.argv[1]
     stock, processes, optimize = parse(config_file)
 
+    hierarchy = get_resource_hierarchy(processes, optimize)
+    print("Resource hierarchy:", hierarchy)
+
     def fitness_function(individual):
         stock_copy = stock.copy()
         processes_copy = processes.copy()
         optimize_copy = optimize.copy()
-        return get_score(individual, processes_copy, stock_copy, optimize_copy)
+        return get_score(
+            individual, processes_copy, stock_copy, optimize_copy, hierarchy
+        )
 
     ga = GeneticAlgorithm(
-        population_size=200,
+        population_size=500,
         crossover_rate=0.9,
         elite_rate=0.05,
         selection_rate=0.6,
         mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
-        generations=100,
+        generations=300,
     )
-    best = ga.run(dna_length=100)
+    best = ga.run(dna_length=1000)
 
     print("Best fitness:", fitness_function(best))
 
-    print("Best individual:", best)
+    best = best[: best.index("stop")] if "stop" in best else best
+
+    print("Best individual:", best, len(best))
+    print(
+        "Stock after best individual:",
+        get_stock_after_individual(best, processes, stock.copy(), optimize),
+    )
