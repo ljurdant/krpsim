@@ -3,10 +3,66 @@
 from _types import Process
 from typing import List
 from genetic_algorithm import GeneticAlgorithm
+import random
 from parser import parse
 import sys
 
 from matplotlib import pyplot as plt
+
+
+def can_run_task(stock: dict[str, int], needs: dict[str, int]) -> bool:
+    """
+    Check if a task can be run with the current stock.
+    """
+    for need, amount in needs.items():
+        if stock.get(need, 0) < amount:
+            return False
+    return True
+
+
+def run_task(stock: dict[str, int], task: dict[str, int]) -> None:
+    """
+    Run a task and update the stock.
+    """
+    for resource, amount in task["need"].items():
+        stock[resource] = stock.get(resource, 0) - amount
+
+    # Add the result to the stock
+    for resource, amount in task["result"].items():
+        stock[resource] = stock.get(resource, 0) + amount
+
+
+def generate_feasible_individual(processes, initial_stock, max_length=30):
+    """
+    Returns a random feasible chromosome built via SGS,
+    stopping when no more tasks are feasible or max_length is reached.
+    """
+
+    stock_copy = initial_stock.copy()
+    chromosome = []
+    task_names = list(processes.keys())  # Genes
+
+    for _ in range(max_length):
+        feasible_tasks = []
+        for task_name in task_names:
+            # Check if we can run 'task_name' with current stock_copy
+            if can_run_task(stock_copy, processes[task_name]["need"]):
+                feasible_tasks.append(task_name)
+
+        if not feasible_tasks:
+            # No more tasks can be run
+            break
+
+        # Randomly select one feasible task
+        chosen_task = random.choice(feasible_tasks)
+
+        # Append to chromosome
+        chromosome.append(chosen_task)
+
+        # Update stock
+        run_task(stock_copy, processes[chosen_task])
+
+    return chromosome
 
 
 def do_process(
@@ -31,96 +87,11 @@ def do_process(
     return process["time"], True
 
 
-# def compute_hierarchy(processes: dict[str, dict], root_weights=None):
-#     if root_weights is None:
-#         root_weights = {}
-
-#     resource_weights = {}
-
-#     def get_weight(resource):
-#         if resource in resource_weights:
-#             return resource_weights[resource]
-#         weight = 1.0  # base weight
-
-#         # Check which processes produce this resource
-#         producing_procs = [p for p in processes.values() if resource in p["result"]]
-
-#         for proc in producing_procs:
-#             time = proc["time"]
-#             for need_res, qty in proc["need"].items():
-#                 weight += get_weight(need_res) * qty
-#             weight += time  # more time = more value
-
-#         resource_weights[resource] = weight
-#         return weight
-
-#     # Start by computing weight for all result resources
-#     for proc in processes.values():
-#         for res in proc["result"]:
-#             get_weight(res)
-
-#     # Normalize
-#     max_weight = max(resource_weights.values())
-#     for res in resource_weights:
-#         resource_weights[res] /= max_weight
-
-#     return resource_weights
-
-
-def get_resource_hierarchy(
-    processes: dict[str, Process], optimize: List[str]
-) -> dict[str, List[str]]:
-
-    processes = processes.copy()
-    # Remove the stop process
-    optimize_resources = [resource for resource in optimize if resource != "time"]
-
-    resources = set(
-        [key for process in processes.values() for key in process["need"].keys()]
-        + [key for process in processes.values() for key in process["result"].keys()]
-    )
-    hierarchy_dict = {}
-    for resource in optimize_resources:
-        resources.remove(resource)
-        hierarchy_dict[resource] = 1
-
-    while len(resources):
-        tmp_resources = resources.copy()
-        for resource in tmp_resources:
-            needed = 0
-            b = False
-            for process in processes.values():
-                if (
-                    sum(
-                        key in hierarchy_dict.keys() for key in process["result"].keys()
-                    )
-                    > 0
-                ):
-                    if resource in process["need"]:
-                        needed = 0.5 * max(
-                            hierarchy_dict[key] if key in hierarchy_dict.keys() else 0
-                            for key in process["result"].keys()
-                        )
-                        b = True
-                        if resource in hierarchy_dict.keys():
-
-                            hierarchy_dict[resource] = max(
-                                hierarchy_dict[resource], needed
-                            )
-                        else:
-                            hierarchy_dict[resource] = needed
-            if b:
-                resources.remove(resource)
-
-    return hierarchy_dict
-
-
 def get_score(
     individual: List[Process],
     processes,
     stock: dict[str, int],
     optimize: List[str],
-    hierarchy: dict[str, float],
 ) -> float:
 
     total_time = 0
@@ -128,28 +99,25 @@ def get_score(
     for process_name in individual:
         time_taken, success = do_process(process_name, processes, stock)
         total_time += time_taken
-        valid_count += int(success)
+        valid_count += 1
         if not success:
             break
 
-    resources_count = sum(
-        [stock.get(resource) * hierarchy.get(resource, 0) for resource in stock.keys()]
-    )
     target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
-    # resources_count += target_resources_count
 
+    if valid_count == 0:
+        return -5
     if "time" in optimize:
         return target_resources_count / total_time if total_time > 0 else 0
     else:
-        return (
-            target_resources_count * 5
-            + valid_count * 0.5
-            + len([resource for resource, amount in stock.items() if amount > 0]) * 0.2
+        return target_resources_count * 10000 + len(
+            [resource for resource, amount in stock.items() if amount > 0]
         )
+    # I need to add valid_count to the score or something to reward good ressources collected
 
 
 def get_stock_after_individual(
-    individual: List[Process], processes, stock: dict[str, int], optimize: List[str]
+    individual: List[Process], processes, stock: dict[str, int]
 ) -> dict[str, int]:
 
     for process_name in individual:
@@ -193,10 +161,6 @@ if __name__ == "__main__":
     config_file = sys.argv[1]
     stock, processes, optimize = parse(config_file)
 
-    hierarchy = get_resource_hierarchy(processes, optimize)
-
-    print("Resource hierarchy:", hierarchy)
-
     min = 0
     max = 0
     for opt in optimize:
@@ -208,51 +172,54 @@ if __name__ == "__main__":
     if max > 2000:
         max = 2000
 
+    print("Min gene length:", min)
+    print("Max gene length:", max)
+
     def fitness_function(individual):
         stock_copy = stock.copy()
         processes_copy = processes.copy()
         optimize_copy = optimize.copy()
-        return get_score(
-            individual, processes_copy, stock_copy, optimize_copy, hierarchy
-        )
+        return get_score(individual, processes_copy, stock_copy, optimize_copy)
 
-    def get_valid_sequence(processes_names: List[str]) -> List[str]:
-        """Get a valid sequence of processes to do."""
+    def init_population_with_sgs(pop_size):
+        population = []
+        for _ in range(pop_size):
+            individual = generate_feasible_individual(processes, stock, max)
+            population.append(individual)
+        return population
+
+    def is_valid_gene(gene, incomplete_dna):
         stock_copy = stock.copy()
-        # Get the valid processes
-        valid_processes = []
-        for process_name in processes_names:
-            # Check if we have enough resources
-            if all(
-                stock_copy.get(resource, 0) >= amount
-                for resource, amount in processes[process_name]["need"].items()
-            ):
-                valid_processes.append(process_name)
-                # remove the resources from the stock_copy
-                for resource, amount in processes[process_name]["need"].items():
-                    stock_copy[resource] -= amount
-                # add the results to the stock_copy
-                for resource, amount in processes[process_name]["result"].items():
-                    stock_copy[resource] = stock_copy.get(resource, 0) + amount
-        return valid_processes
+        current_stock = get_stock_after_individual(
+            incomplete_dna, processes, stock_copy
+        )
+        if (
+            can_run_task(current_stock, processes[gene]["need"])
+            and len(incomplete_dna) < max
+        ):
+            return True
+        return False
 
     ga = GeneticAlgorithm(
-        population_size=5000,
+        population_size=100,
         crossover_rate=0.7,
         elite_rate=0.05,
         selection_rate=0.5,
-        mutation_rate=0.1,
+        mutation_rate=0.5,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
-        get_valid_sequence=get_valid_sequence,
-        generations=10,
+        init_population=init_population_with_sgs,
+        valid_gene=is_valid_gene,
+        generations=100,
+        min_dna_length=min,
+        max_dna_length=max,
     )
 
-    best = ga.run(max_dna_length=max, min_dna_length=min)
+    best = ga.run()
 
     print("Best fitness:", fitness_function(best))
     print("Best individual:", best, len(best))
     print(
         "Stock after best individual:",
-        get_stock_after_individual(best, processes, stock.copy(), optimize),
+        get_stock_after_individual(best, processes, stock.copy()),
     )
