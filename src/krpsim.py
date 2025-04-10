@@ -35,46 +35,35 @@ def get_resource_hierarchy(
     processes: dict[str, Process], optimize: List[str]
 ) -> dict[str, List[str]]:
 
-    processes = processes.copy()
-    # Remove the stop process
-    optimize_resources = [resource for resource in optimize if resource != "time"]
-
     resources = set(
         [key for process in processes.values() for key in process["need"].keys()]
         + [key for process in processes.values() for key in process["result"].keys()]
     )
+
     hierarchy_dict = {}
-    for resource in optimize_resources:
-        resources.remove(resource)
-        hierarchy_dict[resource] = 1
+    for opt in optimize:
+        hierarchy_dict[opt] = 1
 
-    while len(resources):
-        tmp_resources = resources.copy()
-        for resource in tmp_resources:
-            needed = 0
-            b = False
-            for process in processes.values():
-                if (
-                    sum(
-                        key in hierarchy_dict.keys() for key in process["result"].keys()
-                    )
-                    > 0
-                ):
-                    if resource in process["need"]:
-                        needed = 0.5 * max(
-                            hierarchy_dict[key] if key in hierarchy_dict.keys() else 0
-                            for key in process["result"].keys()
-                        )
-                        b = True
-                        if resource in hierarchy_dict.keys():
+    while hierarchy_dict.keys() != resources:
+        for process in [
+            process
+            for process in processes.values()
+            if any(key in hierarchy_dict.keys() for key in process["result"].keys())
+        ]:
+            for need in process["need"].keys():
+                for result in [
+                    result
+                    for result in process["result"].keys()
+                    if result in hierarchy_dict.keys()
+                ]:
+                    need_value = hierarchy_dict[result] / process["need"][need]
+                    if hierarchy_dict.get(need) is None:
+                        hierarchy_dict[need] = need_value
+                    else:
+                        hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
 
-                            hierarchy_dict[resource] = max(
-                                hierarchy_dict[resource], needed
-                            )
-                        else:
-                            hierarchy_dict[resource] = needed
-            if b:
-                resources.remove(resource)
+    for opt in optimize:
+        hierarchy_dict[opt] = 2
 
     return hierarchy_dict
 
@@ -98,13 +87,8 @@ def get_score(
         failed_steps += int(not success)
 
     resources_count = sum(
-        ((stock.get(resource, 0) * hierarchy[resource]) - (failed_steps / 10)) / 100
-        for resource in stock.keys()
+        ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
     )
-    target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
-    resources_count += target_resources_count
-
-    # ) + success_steps / 100
 
     if "time" in optimize:
         return resources_count / total_time if total_time > 0 else 0
@@ -169,8 +153,8 @@ if __name__ == "__main__":
         min = min + tmp_min
         max = max + tmp_max
 
-    if max > 20000:
-        max = 20000
+    if max > 2000:
+        max = 2000
 
     def fitness_function(individual):
         stock_copy = stock.copy()
