@@ -33,7 +33,6 @@ class GeneticAlgorithm:
         self.genes = genes if genes is not None else []
 
     def sort_population(self):
-
         self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
 
     def parent_selection(self):
@@ -50,9 +49,23 @@ class GeneticAlgorithm:
     def crossover(self, individual1, individual2):
         """Perform crossover between two selected individuals and return two children."""
         child = []
+        # copy_individual1 = copy.deepcopy(individual1)
+        # copy_individual2 = copy.deepcopy(individual2)
+        # if random.random() < self.crossover_rate:
+        #     for _ in range(int(max(len(individual1), len(individual2)) / 2)):
+        #         if len(copy_individual1) != 0:
+        #             gene = random.choice(copy_individual1)
+        #             child.append(gene)
+        #             del copy_individual1[copy_individual1.index(gene)]
+        #         if len(copy_individual2) != 0:
+        #             gene = random.choice(copy_individual2)
+        #             child.append(gene)
+        #             del copy_individual2[copy_individual2.index(gene)]
+        #     return child, True
         if random.random() < self.crossover_rate:
-            crossover_point = random.randint(
-                1, min(len(individual1), len(individual2)) - 1
+            crossover_point = min(
+                random.randint(1, max(len(individual1), len(individual2)) - 1),
+                min(len(individual1), len(individual2)) - 1,
             )
             child = individual1[:crossover_point] + individual2[crossover_point:]
             return child, True
@@ -70,7 +83,7 @@ class GeneticAlgorithm:
 
             child, is_child = self.crossover(parent1, parent2)
 
-            crossover_population.append(self.mutate(child) if is_child else child)
+            crossover_population.append(self.mutate(child))
 
         return crossover_population
 
