@@ -188,18 +188,6 @@ if __name__ == "__main__":
             population.append(individual)
         return population
 
-    def is_valid_gene(gene, incomplete_dna):
-        stock_copy = stock.copy()
-        current_stock = get_stock_after_individual(
-            incomplete_dna, processes, stock_copy
-        )
-        if (
-            can_run_task(current_stock, processes[gene]["need"])
-            and len(incomplete_dna) < max
-        ):
-            return True
-        return False
-
     ga = GeneticAlgorithm(
         population_size=100,
         crossover_rate=0.7,
@@ -209,7 +197,6 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        valid_gene=is_valid_gene,
         generations=100,
         min_dna_length=min,
         max_dna_length=max,
