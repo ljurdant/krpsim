@@ -49,16 +49,37 @@ class GeneticAlgorithm:
     def crossover(self, individual1, individual2):
         """Perform crossover between two selected individuals and return two children."""
         child = []
+        crossover_point = min(
+            random.randint(1, max(len(individual1), len(individual2)) - 1),
+            min(len(individual1), len(individual2)) - 1,
+        )
+        child = individual1[:crossover_point] + individual2[crossover_point:]
+        return child
+
+    def tournament_selection(self, population, k=2):
+        """
+        Perform a tournament of size k on the population.
+        Return the best individual (highest fitness) among k random picks.
+        """
+        # Randomly choose k individuals
+        tournament_contestants = random.sample(population, k)
+
+        # Identify best
+        return max(tournament_contestants, key=lambda x: self.fitness_function(x))
+
+    def create_offspring(self, population, k=2):
+        """
+        Example function to create one child using tournament selection and crossover.
+        """
+        # 1) Select parents via tournament
+        parent1 = self.tournament_selection(population, k)
+        parent2 = self.tournament_selection(population, k)
 
         if random.random() < self.crossover_rate:
-            crossover_point = min(
-                random.randint(1, max(len(individual1), len(individual2)) - 1),
-                min(len(individual1), len(individual2)) - 1,
-            )
-            child = individual1[:crossover_point] + individual2[crossover_point:]
-            return child, True
-        # No crossover: just clone the parents
-        return individual1[:], False
+            child = self.crossover(parent1, parent2)
+        else:
+            child = random.choice([parent1[:], parent2[:]])
+        return child
 
     def crossover_generation(self, population):
         """Create a new generation by crossover."""
@@ -66,10 +87,8 @@ class GeneticAlgorithm:
 
         target_size = self.population_size - int(self.population_size * self.elite_rate)
         while len(crossover_population) < target_size:
-            parent1 = random.choice(population)
-            parent2 = random.choice(population)
 
-            child, is_child = self.crossover(parent1, parent2)
+            child = self.create_offspring(population, 2)
 
             crossover_population.append(self.mutate(child))
 
