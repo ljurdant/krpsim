@@ -244,7 +244,7 @@ if __name__ == "__main__":
     ga = GeneticAlgorithm(
         population_size=500,
         crossover_rate=0.7,
-        elite_rate=0.05,
+        elite_rate=0.02,
         selection_rate=0.3,
         mutation_rate=0.02,
         genes=list(processes.keys()),
@@ -285,7 +285,6 @@ if __name__ == "__main__":
         ),
         indent=4,
     )
-
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")
