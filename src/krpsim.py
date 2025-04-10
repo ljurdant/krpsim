@@ -8,6 +8,11 @@ from parser import parse
 import sys
 import json
 
+import time
+
+from datetime import datetime
+
+
 from matplotlib import pyplot as plt
 
 
@@ -209,7 +214,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    _max = min(_max, 2000)
+    _max = min(_max, 1000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -245,14 +250,14 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=1000,
+        generations=100,
         min_dna_length=_min,
         max_dna_length=_max,
     )
 
     best, fitnesses = ga.run()
-
-    print("Best fitness:", fitness_function(best))
+    fitness = fitness_function(best)
+    print("Best fitness:", fitness)
 
     # print("Best individual:", best, len(best))
     valid_best = []
@@ -266,7 +271,20 @@ if __name__ == "__main__":
         "Stock after best individual:",
         get_stock_after_individual(best, processes, stock.copy()),
     )
-    json.dump(best)
+
+    now = datetime.now()
+
+    current_time = now.strftime("%Y%m%d_%H:%M:%S")
+    print("Time:", current_time)
+
+    json.dump(
+        best,
+        open(
+            f"../results/{config_file.split('/')[-1]}_{fitness*100:.2f}_{current_time}.json",
+            "w",
+        ),
+        indent=4,
+    )
 
     plt.plot(fitnesses)
     plt.xlabel("Generation")
