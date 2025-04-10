@@ -85,9 +85,12 @@ class GeneticAlgorithm:
     def run(self):
         """Run the genetic algorithm."""
         self.population = self.init_population(self.population_size)
+        fitnesses = []
 
         for _ in ft_progress(range(self.generations)):
+
             self.sort_population()
+            fitnesses.append(self.fitness_function(self.population[0]))
 
             parent_population = self.parent_selection()
             elite_population = self.elite_selection()
@@ -98,4 +101,5 @@ class GeneticAlgorithm:
 
             # cleanup population
         self.sort_population()
-        return self.population[0]  # Return the best individual
+        fitnesses.append(self.fitness_function(self.population[0]))
+        return self.population[0], fitnesses  # Return the best individual

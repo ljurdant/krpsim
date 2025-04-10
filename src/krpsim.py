@@ -241,7 +241,13 @@ if __name__ == "__main__":
         max_dna_length=_max,
     )
 
-    best = ga.run()
+    best, fitnesses = ga.run()
+
+    plt.plot(fitnesses)
+    plt.xlabel("Generation")
+    plt.ylabel("Fitness")
+    plt.title("Fitness over generations")
+    plt.show()
 
     print("Best fitness:", fitness_function(best))
     # print("Best individual:", best, len(best))
