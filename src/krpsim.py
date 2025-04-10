@@ -140,8 +140,8 @@ def get_score(
         time_taken, success = do_process(process_name, processes, stock)
         total_time += time_taken
         valid_count += int(success)
-        if not success:
-            break
+        # if not success:
+        #     break
 
     resources_count = sum(
         ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
@@ -219,8 +219,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    if _max > 2000:
-        _max = 2000
+    _max = max(_max, 4000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -284,12 +283,12 @@ if __name__ == "__main__":
         crossover_rate=0.7,
         elite_rate=0.05,
         selection_rate=0.5,
-        mutation_rate=0.5,
+        mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
         valid_gene=is_valid_gene,
-        crossover=crossover,
+        # crossover=crossover,
         generations=100,
         min_dna_length=_min,
         max_dna_length=_max,

@@ -44,7 +44,7 @@ class GeneticAlgorithm:
         self.fitness_function = fitness_function
         self.init_population = init_population
         self.valid_gene = valid_gene
-        self.crossover = crossover
+        # self.crossover = crossover
         self.elite_rate = elite_rate
         self.min_dna_length = min_dna_length
         self.max_dna_length = max_dna_length
@@ -77,7 +77,7 @@ class GeneticAlgorithm:
         # No crossover: just clone the parents
         return individual1[:], False
 
-    @measure_time
+    # @measure_time
     def crossover_generation(self, population):
         """Create a new generation by crossover."""
         crossover_population = []
@@ -104,10 +104,20 @@ class GeneticAlgorithm:
     def run(self):
         """Run the genetic algorithm."""
         self.population = self.init_population(self.population_size)
+        print("Initial population:")
+        # print(self.population)
+        initial_population_sizes = [len(individual) for individual in self.population]
+        initial_population_sizes.sort()
+        print(
+            "initial population individual sizes:",  # len of each individual
+            initial_population_sizes,
+        )
 
         for _ in ft_progress(range(self.generations)):
             self.sort_population()
-
+            for i in range(len(self.population)):
+                print(self.fitness_function(self.population[i]), end=", ")
+            print()
             parent_population = self.parent_selection()
             elite_population = self.elite_selection()
 
