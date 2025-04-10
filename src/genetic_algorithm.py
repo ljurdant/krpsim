@@ -100,6 +100,7 @@ class GeneticAlgorithm:
         self.population = self.init_population(self.population_size)
         fitnesses = []
 
+        print(sorted([len(pop) for pop in self.population]))
         for _ in ft_progress(range(self.generations)):
 
             self.sort_population()

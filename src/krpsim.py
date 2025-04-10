@@ -45,7 +45,6 @@ def do_process(
 def generate_feasible_individual(
     processes: dict[str, Process],
     initial_stock: dict[str, int],
-    min_length: int = 0,
     max_length=30,
 ) -> List[str]:
     """
@@ -56,17 +55,16 @@ def generate_feasible_individual(
     stock_copy = initial_stock.copy()
     chromosome = []
     task_names = list(processes.keys())  # Genes
-    length = random.randint(min_length, max_length)
-    for _ in range(length):
+    for _ in range(max_length):
         feasible_tasks = task_names
-        # for task_name in task_names:
-        #     # Check if we can run 'task_name' with current stock_copy
-        #     if can_run_task(stock_copy, processes[task_name]["need"]):
-        #         feasible_tasks.append(task_name)
+        for task_name in task_names:
+            # Check if we can run 'task_name' with current stock_copy
+            if can_run_task(stock_copy, processes[task_name]["need"]):
+                feasible_tasks.append(task_name)
 
-        # if not feasible_tasks:
-        #     # No more tasks can be run
-        #     break
+        if not feasible_tasks:
+            # No more tasks can be run
+            break
 
         # Randomly select one feasible task
         chosen_task = random.choice(feasible_tasks)
@@ -76,6 +74,19 @@ def generate_feasible_individual(
 
         # Update stock
         do_process(chosen_task, processes, stock_copy)
+
+    return chromosome
+
+
+def generate_random_individual(
+    processes: dict[str, Process],
+    min_length: int = 0,
+    max_length=30,
+) -> List[str]:
+
+    task_names = list(processes.keys())  # Genes
+    length = random.randint(min_length, max_length)
+    chromosome = [random.choice(task_names) for _ in range(length)]
 
     return chromosome
 
@@ -197,7 +208,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    _max = min(_max, 4000)
+    _max = min(_max, 1000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -214,34 +225,31 @@ if __name__ == "__main__":
 
     def init_population_with_sgs(pop_size):
         population = []
-        for _ in range(pop_size):
-            individual = generate_feasible_individual(processes, stock, _min, _max)
+        for _ in range(pop_size // 2):
+            individual = generate_feasible_individual(processes, stock, _max)
             population.append(individual)
-        return population
 
-    print(sorted([len(pop) for pop in init_population_with_sgs(500)]))
+        for _ in range(pop_size - pop_size // 2):
+            individual = generate_random_individual(processes, _min, _max)
+            population.append(individual)
+
+        return population
 
     ga = GeneticAlgorithm(
         population_size=500,
         crossover_rate=0.7,
         elite_rate=0.05,
-        selection_rate=0.5,
+        selection_rate=0.3,
         mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=100,
+        generations=200,
         min_dna_length=_min,
         max_dna_length=_max,
     )
 
     best, fitnesses = ga.run()
-
-    plt.plot(fitnesses)
-    plt.xlabel("Generation")
-    plt.ylabel("Fitness")
-    plt.title("Fitness over generations")
-    plt.show()
 
     print("Best fitness:", fitness_function(best))
 
@@ -256,3 +264,9 @@ if __name__ == "__main__":
         "Stock after best individual:",
         get_stock_after_individual(best, processes, stock.copy()),
     )
+
+    plt.plot(fitnesses)
+    plt.xlabel("Generation")
+    plt.ylabel("Fitness")
+    plt.title("Fitness over generations")
+    plt.show()
