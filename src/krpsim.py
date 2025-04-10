@@ -6,6 +6,7 @@ from genetic_algorithm import GeneticAlgorithm
 import random
 from parser import parse
 import sys
+import json
 
 from matplotlib import pyplot as plt
 
@@ -56,7 +57,7 @@ def generate_feasible_individual(
     chromosome = []
     task_names = list(processes.keys())  # Genes
     for _ in range(max_length):
-        feasible_tasks = task_names
+        feasible_tasks = []
         for task_name in task_names:
             # Check if we can run 'task_name' with current stock_copy
             if can_run_task(stock_copy, processes[task_name]["need"]):
@@ -208,7 +209,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    _max = min(_max, 1000)
+    _max = min(_max, 2000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -244,7 +245,7 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=200,
+        generations=1000,
         min_dna_length=_min,
         max_dna_length=_max,
     )
@@ -255,8 +256,9 @@ if __name__ == "__main__":
 
     # print("Best individual:", best, len(best))
     valid_best = []
+    copy = stock.copy()
     for process in best:
-        _, success = do_process(process, processes, stock)
+        _, success = do_process(process, processes, copy)
         if success:
             valid_best.append(process)
     print("Best individual:", valid_best, len(valid_best))
@@ -264,6 +266,7 @@ if __name__ == "__main__":
         "Stock after best individual:",
         get_stock_after_individual(best, processes, stock.copy()),
     )
+    json.dump(best)
 
     plt.plot(fitnesses)
     plt.xlabel("Generation")
