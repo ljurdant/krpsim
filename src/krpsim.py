@@ -87,11 +87,49 @@ def do_process(
     return process["time"], True
 
 
+def get_resource_hierarchy(
+    processes: dict[str, Process], optimize: List[str]
+) -> dict[str, List[str]]:
+
+    resources = set(
+        [key for process in processes.values() for key in process["need"].keys()]
+        + [key for process in processes.values() for key in process["result"].keys()]
+    )
+
+    hierarchy_dict = {}
+    for opt in optimize:
+        hierarchy_dict[opt] = 1
+
+    while hierarchy_dict.keys() != resources:
+        for process in [
+            process
+            for process in processes.values()
+            if any(key in hierarchy_dict.keys() for key in process["result"].keys())
+        ]:
+            for need in process["need"].keys():
+                for result in [
+                    result
+                    for result in process["result"].keys()
+                    if result in hierarchy_dict.keys()
+                ]:
+                    need_value = hierarchy_dict[result] / process["need"][need]
+                    if hierarchy_dict.get(need) is None:
+                        hierarchy_dict[need] = need_value
+                    else:
+                        hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
+
+    for opt in optimize:
+        hierarchy_dict[opt] = 2
+
+    return hierarchy_dict
+
+
 def get_score(
     individual: List[Process],
     processes,
     stock: dict[str, int],
     optimize: List[str],
+    hierarchy: dict[str, float],
 ) -> float:
 
     total_time = 0
@@ -99,20 +137,18 @@ def get_score(
     for process_name in individual:
         time_taken, success = do_process(process_name, processes, stock)
         total_time += time_taken
-        valid_count += 1
+        valid_count += int(success)
         if not success:
             break
 
-    target_resources_count = sum(stock.get(resource, 0) for resource in optimize)
+    resources_count = sum(
+        ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
+    )
 
-    if valid_count == 0:
-        return -5
     if "time" in optimize:
-        return target_resources_count / total_time if total_time > 0 else 0
+        return resources_count / total_time if total_time > 0 else 0
     else:
-        return target_resources_count * 10000 + len(
-            [resource for resource, amount in stock.items() if amount > 0]
-        )
+        return resources_count + valid_count / len(individual)
     # I need to add valid_count to the score or something to reward good ressources collected
 
 
@@ -161,35 +197,38 @@ if __name__ == "__main__":
     config_file = sys.argv[1]
     stock, processes, optimize = parse(config_file)
 
-    min = 0
-    max = 0
+    _min = 0
+    _max = 0
     for opt in optimize:
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-        min = min + tmp_min
-        max = max + tmp_max
+        _min = _min + tmp_min
+        _max = _max + tmp_max
 
-    # min = 1000
-    if max > 2000:
-        max = 2000
+    if _max > 2000:
+        _max = 2000
 
-    print("Min gene length:", min)
-    print("Max gene length:", max)
+    print("Min gene length:", _min)
+    print("Max gene length:", _max)
+    hierarchy = get_resource_hierarchy(processes, optimize)
+    print("Hierarchy:", hierarchy)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
         processes_copy = processes.copy()
         optimize_copy = optimize.copy()
-        return get_score(individual, processes_copy, stock_copy, optimize_copy)
+        return get_score(
+            individual, processes_copy, stock_copy, optimize_copy, hierarchy
+        )
 
     def init_population_with_sgs(pop_size):
         population = []
         for _ in range(pop_size):
-            individual = generate_feasible_individual(processes, stock, max)
+            individual = generate_feasible_individual(processes, stock, _max)
             population.append(individual)
         return population
 
     ga = GeneticAlgorithm(
-        population_size=100,
+        population_size=500,
         crossover_rate=0.7,
         elite_rate=0.05,
         selection_rate=0.5,
@@ -197,15 +236,16 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=100,
-        min_dna_length=min,
-        max_dna_length=max,
+        generations=300,
+        min_dna_length=_min,
+        max_dna_length=_max,
     )
 
     best = ga.run()
 
     print("Best fitness:", fitness_function(best))
-    print("Best individual:", best, len(best))
+    # print("Best individual:", best, len(best))
+
     print(
         "Stock after best individual:",
         get_stock_after_individual(best, processes, stock.copy()),
