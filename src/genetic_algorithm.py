@@ -2,6 +2,20 @@ import threading
 from loading import ft_progress
 import random
 import copy
+import time
+
+
+def measure_time(func):
+    """Decorator that measures the execution time of the decorated function."""
+
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        print(f"{func.__name__} executed in {end_time - start_time:.6f} seconds")
+        return result
+
+    return wrapper
 
 
 class GeneticAlgorithm:
@@ -17,6 +31,7 @@ class GeneticAlgorithm:
         fitness_function=None,
         init_population=None,
         valid_gene=None,
+        crossover=None,
         min_dna_length=None,
         max_dna_length=None,
     ):
@@ -29,6 +44,7 @@ class GeneticAlgorithm:
         self.fitness_function = fitness_function
         self.init_population = init_population
         self.valid_gene = valid_gene
+        self.crossover = crossover
         self.elite_rate = elite_rate
         self.min_dna_length = min_dna_length
         self.max_dna_length = max_dna_length
@@ -49,60 +65,61 @@ class GeneticAlgorithm:
         elite_count = int(self.population_size * self.elite_rate)
         return self.population[:elite_count]
 
-    def crossover(self, individual1, individual2):
-        """Perform crossover between two selected individuals and return two children."""
-        # copy_individual1 = copy.deepcopy(individual1)
-        # copy_individual2 = copy.deepcopy(individual2)
-        child = []
-        if random.random() < self.crossover_rate:
-            crossover_point = random.randint(
-                1, min(len(individual1), len(individual2)) - 1
-            )
-            child = individual1[:crossover_point] + individual2[crossover_point:]
-            return child, True
-            # for _ in range(int(max(len(individual1), len(individual2)))):
-            #     i = 0
-            #     len_copy_individual1 = len(copy_individual1)
-            #     while len_copy_individual1 > 0 and not self.valid_gene(
-            #         copy_individual1[i], child
-            #     ):
-            #         if i >= len_copy_individual1 - 1:
-            #             break
-            #         i += 1
-            #     if len_copy_individual1 > 0 and self.valid_gene(
-            #         copy_individual1[i], child
-            #     ):
-            #         child.append(copy_individual1[i])
-            #     if len_copy_individual1 > 0:
-            #         # remove the gene from the copy
-            #         # to avoid duplicates
-            #         del copy_individual1[i]
-            #     j = 0
-            #     len_copy_individual2 = len(copy_individual2)
-            #     while len_copy_individual2 > 0 and not self.valid_gene(
-            #         copy_individual2[j], child
-            #     ):
-            #         if j >= len_copy_individual2 - 1:
-            #             break
-            #         j += 1
-            #     if len_copy_individual2 > 0 and self.valid_gene(
-            #         copy_individual2[j], child
-            #     ):
-            #         child.append(copy_individual2[j])
-            #     if len_copy_individual2 > 0:
-            #         # remove the gene from the copy
-            #         # to avoid duplicates
-            #         del copy_individual2[j]
+    # def crossover(self, individual1, individual2):
+    #     """Perform crossover between two selected individuals and return two children."""
+    #     # copy_individual1 = copy.deepcopy(individual1)
+    #     # copy_individual2 = copy.deepcopy(individual2)
+    #     child = []
+    #     if random.random() < self.crossover_rate:
+    #         crossover_point = random.randint(
+    #             1, min(len(individual1), len(individual2)) - 1
+    #         )
+    #         child = individual1[:crossover_point] + individual2[crossover_point:]
+    #         return child, True
+    #         # for _ in range(int(max(len(individual1), len(individual2)))):
+    #         #     i = 0
+    #         #     len_copy_individual1 = len(copy_individual1)
+    #         #     while len_copy_individual1 > 0 and not self.valid_gene(
+    #         #         copy_individual1[i], child
+    #         #     ):
+    #         #         if i >= len_copy_individual1 - 1:
+    #         #             break
+    #         #         i += 1
+    #         #     if len_copy_individual1 > 0 and self.valid_gene(
+    #         #         copy_individual1[i], child
+    #         #     ):
+    #         #         child.append(copy_individual1[i])
+    #         #     if len_copy_individual1 > 0:
+    #         #         # remove the gene from the copy
+    #         #         # to avoid duplicates
+    #         #         del copy_individual1[i]
+    #         #     j = 0
+    #         #     len_copy_individual2 = len(copy_individual2)
+    #         #     while len_copy_individual2 > 0 and not self.valid_gene(
+    #         #         copy_individual2[j], child
+    #         #     ):
+    #         #         if j >= len_copy_individual2 - 1:
+    #         #             break
+    #         #         j += 1
+    #         #     if len_copy_individual2 > 0 and self.valid_gene(
+    #         #         copy_individual2[j], child
+    #         #     ):
+    #         #         child.append(copy_individual2[j])
+    #         #     if len_copy_individual2 > 0:
+    #         #         # remove the gene from the copy
+    #         #         # to avoid duplicates
+    #         #         del copy_individual2[j]
 
-            # if len(child) >= self.min_dna_length:
-            #     return child, True
-            # else:
-            #     # If the child is not valid, return the first parent
-            #     # and set is_child to False
-            #     return individual1[:], False
-        # No crossover: just clone the parents
-        return individual1[:], False
+    #         # if len(child) >= self.min_dna_length:
+    #         #     return child, True
+    #         # else:
+    #         #     # If the child is not valid, return the first parent
+    #         #     # and set is_child to False
+    #         #     return individual1[:], False
+    #     # No crossover: just clone the parents
+    #     return individual1[:], False
 
+    @measure_time
     def crossover_generation(self, population):
         """Create a new generation by crossover."""
         crossover_population = []
@@ -132,16 +149,16 @@ class GeneticAlgorithm:
                 new_gene = random.choice(self.genes)
                 idx = random.randint(0, len(mutated))
                 mutated.insert(idx, new_gene)
-        if random.random() < self.mutation_rate:
-            for i in range(len(mutated)):
-                if random.random() < self.mutation_rate:
-                    mutated[i] = random.choice(self.genes)
+        # if random.random() < self.mutation_rate:
+        for i in range(len(mutated)):
+            if random.random() < self.mutation_rate:
+                mutated[i] = random.choice(self.genes)
 
-                # dna_until_i = mutated[: i - 1]
-                # new_gene = random.choice(self.genes)
-                # if self.valid_gene(new_gene, dna_until_i):
-                #     # print("Mutating gene", mutated[i], "to", new_gene)
-                #     mutated[i] = new_gene
+            # dna_until_i = mutated[: i - 1]
+            # new_gene = random.choice(self.genes)
+            # if self.valid_gene(new_gene, dna_until_i):
+            #     # print("Mutating gene", mutated[i], "to", new_gene)
+            #     mutated[i] = new_gene
         return mutated
 
     def run(self):

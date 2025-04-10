@@ -6,6 +6,8 @@ from genetic_algorithm import GeneticAlgorithm
 import random
 from parser import parse
 import sys
+from collections import Counter
+import time
 
 from matplotlib import pyplot as plt
 
@@ -110,8 +112,9 @@ def get_score(
     if "time" in optimize:
         return target_resources_count / total_time if total_time > 0 else 0
     else:
-        return target_resources_count * 10000 + len(
-            [resource for resource, amount in stock.items() if amount > 0]
+        return (
+            target_resources_count * 10000
+            + len([resource for resource, amount in stock.items() if amount > 0]) * 100
         )
     # I need to add valid_count to the score or something to reward good ressources collected
 
@@ -124,6 +127,19 @@ def get_stock_after_individual(
         do_process(process_name, processes, stock)
 
     return stock
+
+
+def measure_time(func):
+    """Decorator that measures the execution time of the decorated function."""
+
+    def wrapper(*args, **kwargs):
+        start_time = time.perf_counter()
+        result = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        print(f"{func.__name__} executed in {end_time - start_time:.6f} seconds")
+        return result
+
+    return wrapper
 
 
 def get_min_max_gene_length(
@@ -161,19 +177,19 @@ if __name__ == "__main__":
     config_file = sys.argv[1]
     stock, processes, optimize = parse(config_file)
 
-    min = 0
-    max = 0
+    min_dna_length = 0
+    max_dna_length = 0
     for opt in optimize:
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-        min = min + tmp_min
-        max = max + tmp_max
+        min_dna_length = min_dna_length + tmp_min
+        max_dna_length = max_dna_length + tmp_max
 
     # min = 1000
-    if max > 2000:
-        max = 2000
+    if max_dna_length > 2000:
+        max_dna_length = 2000
 
-    print("Min gene length:", min)
-    print("Max gene length:", max)
+    print("Min gene length:", min_dna_length)
+    print("Max gene length:", max_dna_length)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -184,7 +200,7 @@ if __name__ == "__main__":
     def init_population_with_sgs(pop_size):
         population = []
         for _ in range(pop_size):
-            individual = generate_feasible_individual(processes, stock, max)
+            individual = generate_feasible_individual(processes, stock, max_dna_length)
             population.append(individual)
         return population
 
@@ -195,10 +211,35 @@ if __name__ == "__main__":
         )
         if (
             can_run_task(current_stock, processes[gene]["need"])
-            and len(incomplete_dna) < max
+            and len(incomplete_dna) < max_dna_length
         ):
             return True
         return False
+
+    def crossover(individual1, individual2):
+        """Crossover two individuals."""
+        child = []
+        # group by genes individual1 and individual2
+        count_individual1 = Counter(individual1)
+        count_individual2 = Counter(individual2)
+        for _ in range(int(max(len(individual1), len(individual2)))):
+            for gene, count in count_individual1.items():
+                if count > 0 and is_valid_gene(gene, child):
+                    child.append(gene)
+                    count_individual1[gene] -= 1
+                    break
+            for gene, count in count_individual2.items():
+                if count > 0 and is_valid_gene(gene, child):
+                    child.append(gene)
+                    count_individual2[gene] -= 1
+                    break
+        # Check if the child is valid
+        if len(child) >= min_dna_length:
+            return child, True
+        else:
+            # If the child is not valid, return the first parent
+            # and set is_child to False
+            return individual1[:], False
 
     ga = GeneticAlgorithm(
         population_size=100,
@@ -210,9 +251,10 @@ if __name__ == "__main__":
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
         valid_gene=is_valid_gene,
+        crossover=crossover,
         generations=100,
-        min_dna_length=min,
-        max_dna_length=max,
+        min_dna_length=min_dna_length,
+        max_dna_length=max_dna_length,
     )
 
     best = ga.run()
