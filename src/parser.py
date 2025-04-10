@@ -103,15 +103,15 @@ def parse(filepath):
                     "result": results_dict,
                     "time": delay,
                 }
-                processes["stop"] = {
-                    "need": {},
-                    "result": {},
-                    "time": 0,
-                }
             else:
                 # Otherwise, assume it's a stock line, e.g. "euro:10"
                 if ":" in line:
                     stock_name, qty_str = line.split(":", 1)
                     stocks[stock_name.strip()] = int(qty_str.strip())
 
+    # processes["stop"] = {
+    #     "need": {},
+    #     "result": {},
+    #     "time": 0,
+    # }
     return stocks, processes, optimize_targets

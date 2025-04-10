@@ -15,6 +15,9 @@ class GeneticAlgorithm:
         generations=100,
         genes=None,
         fitness_function=None,
+        init_population=None,
+        min_dna_length=None,
+        max_dna_length=None,
     ):
         self.population_size = population_size
         self.population = []
@@ -23,21 +26,15 @@ class GeneticAlgorithm:
         self.selection_rate = selection_rate
         self.generations = generations
         self.fitness_function = fitness_function
+        self.init_population = init_population
         self.elite_rate = elite_rate
+        self.min_dna_length = min_dna_length
+        self.max_dna_length = max_dna_length
         self.genes = genes if genes is not None else []
-
-    def init_population(self, min_dna_length, max_dna_length):
-        """Initialize the population with random genes."""
-        # Create a random population
-        for _ in range(self.population_size):
-            dna_length = random.randint(min_dna_length, max_dna_length)
-            individual = [random.choice(self.genes) for _ in range(dna_length)]
-            self.population.append(individual)
 
     def sort_population(self):
 
         self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
-        self.population = self.population[: self.population_size]
 
     def parent_selection(self):
         """Select the best individuals from the population."""
@@ -52,13 +49,15 @@ class GeneticAlgorithm:
 
     def crossover(self, individual1, individual2):
         """Perform crossover between two selected individuals and return two children."""
+        child = []
         if random.random() < self.crossover_rate:
-            crossover_point = random.randint(1, len(individual1) - 1)
-            child1 = individual1[:crossover_point] + individual2[crossover_point:]
-            child2 = individual2[:crossover_point] + individual1[crossover_point:]
-            return child1, child2
+            crossover_point = random.randint(
+                1, min(len(individual1), len(individual2)) - 1
+            )
+            child = individual1[:crossover_point] + individual2[crossover_point:]
+            return child, True
         # No crossover: just clone the parents
-        return individual1[:], individual2[:]
+        return individual1[:], False
 
     def crossover_generation(self, population):
         """Create a new generation by crossover."""
@@ -69,11 +68,9 @@ class GeneticAlgorithm:
             parent1 = random.choice(population)
             parent2 = random.choice(population)
 
-            child1, child2 = self.crossover(parent1, parent2)
+            child, is_child = self.crossover(parent1, parent2)
 
-            crossover_population.append(self.mutate(child1))
-            if len(crossover_population) < target_size:
-                crossover_population.append(self.mutate(child2))
+            crossover_population.append(self.mutate(child) if is_child else child)
 
         return crossover_population
 
@@ -85,9 +82,9 @@ class GeneticAlgorithm:
                 mutated[i] = random.choice(self.genes)
         return mutated
 
-    def run(self, min_dna_length, max_dna_length):
+    def run(self):
         """Run the genetic algorithm."""
-        self.init_population(min_dna_length, max_dna_length)
+        self.population = self.init_population(self.population_size)
 
         for _ in ft_progress(range(self.generations)):
             self.sort_population()
@@ -98,5 +95,7 @@ class GeneticAlgorithm:
             crossover_population = self.crossover_generation(parent_population)
 
             self.population = crossover_population + elite_population
+
+            # cleanup population
         self.sort_population()
         return self.population[0]  # Return the best individual
