@@ -33,7 +33,6 @@ class GeneticAlgorithm:
         self.genes = genes if genes is not None else []
 
     def sort_population(self):
-
         self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
 
     def parent_selection(self):
@@ -50,9 +49,11 @@ class GeneticAlgorithm:
     def crossover(self, individual1, individual2):
         """Perform crossover between two selected individuals and return two children."""
         child = []
+
         if random.random() < self.crossover_rate:
-            crossover_point = random.randint(
-                1, min(len(individual1), len(individual2)) - 1
+            crossover_point = min(
+                random.randint(1, max(len(individual1), len(individual2)) - 1),
+                min(len(individual1), len(individual2)) - 1,
             )
             child = individual1[:crossover_point] + individual2[crossover_point:]
             return child, True
@@ -70,7 +71,7 @@ class GeneticAlgorithm:
 
             child, is_child = self.crossover(parent1, parent2)
 
-            crossover_population.append(self.mutate(child) if is_child else child)
+            crossover_population.append(self.mutate(child))
 
         return crossover_population
 
@@ -85,9 +86,13 @@ class GeneticAlgorithm:
     def run(self):
         """Run the genetic algorithm."""
         self.population = self.init_population(self.population_size)
+        fitnesses = []
 
+        print(sorted([len(pop) for pop in self.population]))
         for _ in ft_progress(range(self.generations)):
+
             self.sort_population()
+            fitnesses.append(self.fitness_function(self.population[0]))
 
             parent_population = self.parent_selection()
             elite_population = self.elite_selection()
@@ -98,4 +103,5 @@ class GeneticAlgorithm:
 
             # cleanup population
         self.sort_population()
-        return self.population[0]  # Return the best individual
+        fitnesses.append(self.fitness_function(self.population[0]))
+        return self.population[0], fitnesses  # Return the best individual

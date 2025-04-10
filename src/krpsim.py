@@ -6,6 +6,7 @@ from genetic_algorithm import GeneticAlgorithm
 import random
 from parser import parse
 import sys
+import json
 
 from matplotlib import pyplot as plt
 
@@ -18,51 +19,6 @@ def can_run_task(stock: dict[str, int], needs: dict[str, int]) -> bool:
         if stock.get(need, 0) < amount:
             return False
     return True
-
-
-def run_task(stock: dict[str, int], task: dict[str, int]) -> None:
-    """
-    Run a task and update the stock.
-    """
-    for resource, amount in task["need"].items():
-        stock[resource] = stock.get(resource, 0) - amount
-
-    # Add the result to the stock
-    for resource, amount in task["result"].items():
-        stock[resource] = stock.get(resource, 0) + amount
-
-
-def generate_feasible_individual(processes, initial_stock, max_length=30):
-    """
-    Returns a random feasible chromosome built via SGS,
-    stopping when no more tasks are feasible or max_length is reached.
-    """
-
-    stock_copy = initial_stock.copy()
-    chromosome = []
-    task_names = list(processes.keys())  # Genes
-
-    for _ in range(max_length):
-        feasible_tasks = []
-        for task_name in task_names:
-            # Check if we can run 'task_name' with current stock_copy
-            if can_run_task(stock_copy, processes[task_name]["need"]):
-                feasible_tasks.append(task_name)
-
-        if not feasible_tasks:
-            # No more tasks can be run
-            break
-
-        # Randomly select one feasible task
-        chosen_task = random.choice(feasible_tasks)
-
-        # Append to chromosome
-        chromosome.append(chosen_task)
-
-        # Update stock
-        run_task(stock_copy, processes[chosen_task])
-
-    return chromosome
 
 
 def do_process(
@@ -85,6 +41,55 @@ def do_process(
         stock[resource] = stock.get(resource, 0) + amount
 
     return process["time"], True
+
+
+def generate_feasible_individual(
+    processes: dict[str, Process],
+    initial_stock: dict[str, int],
+    max_length=30,
+) -> List[str]:
+    """
+    Returns a random feasible chromosome built via SGS,
+    stopping when no more tasks are feasible or max_length is reached.
+    """
+
+    stock_copy = initial_stock.copy()
+    chromosome = []
+    task_names = list(processes.keys())  # Genes
+    for _ in range(max_length):
+        feasible_tasks = []
+        for task_name in task_names:
+            # Check if we can run 'task_name' with current stock_copy
+            if can_run_task(stock_copy, processes[task_name]["need"]):
+                feasible_tasks.append(task_name)
+
+        if not feasible_tasks:
+            # No more tasks can be run
+            break
+
+        # Randomly select one feasible task
+        chosen_task = random.choice(feasible_tasks)
+
+        # Append to chromosome
+        chromosome.append(chosen_task)
+
+        # Update stock
+        do_process(chosen_task, processes, stock_copy)
+
+    return chromosome
+
+
+def generate_random_individual(
+    processes: dict[str, Process],
+    min_length: int = 0,
+    max_length=30,
+) -> List[str]:
+
+    task_names = list(processes.keys())  # Genes
+    length = random.randint(min_length, max_length)
+    chromosome = [random.choice(task_names) for _ in range(length)]
+
+    return chromosome
 
 
 def get_resource_hierarchy(
@@ -138,8 +143,8 @@ def get_score(
         time_taken, success = do_process(process_name, processes, stock)
         total_time += time_taken
         valid_count += int(success)
-        if not success:
-            break
+        # if not success:
+        # break
 
     resources_count = sum(
         ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
@@ -148,7 +153,7 @@ def get_score(
     if "time" in optimize:
         return resources_count / total_time if total_time > 0 else 0
     else:
-        return resources_count + valid_count / len(individual)
+        return resources_count  # + valid_count / len(individual)
     # I need to add valid_count to the score or something to reward good ressources collected
 
 
@@ -204,8 +209,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    if _max > 2000:
-        _max = 2000
+    _max = min(_max, 2000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -222,31 +226,50 @@ if __name__ == "__main__":
 
     def init_population_with_sgs(pop_size):
         population = []
-        for _ in range(pop_size):
+        for _ in range(pop_size // 2):
             individual = generate_feasible_individual(processes, stock, _max)
             population.append(individual)
+
+        for _ in range(pop_size - pop_size // 2):
+            individual = generate_random_individual(processes, _min, _max)
+            population.append(individual)
+
         return population
 
     ga = GeneticAlgorithm(
         population_size=500,
         crossover_rate=0.7,
         elite_rate=0.05,
-        selection_rate=0.5,
-        mutation_rate=0.5,
+        selection_rate=0.3,
+        mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=300,
+        generations=1000,
         min_dna_length=_min,
         max_dna_length=_max,
     )
 
-    best = ga.run()
+    best, fitnesses = ga.run()
 
     print("Best fitness:", fitness_function(best))
-    # print("Best individual:", best, len(best))
 
+    # print("Best individual:", best, len(best))
+    valid_best = []
+    copy = stock.copy()
+    for process in best:
+        _, success = do_process(process, processes, copy)
+        if success:
+            valid_best.append(process)
+    print("Best individual:", valid_best, len(valid_best))
     print(
         "Stock after best individual:",
         get_stock_after_individual(best, processes, stock.copy()),
     )
+    json.dump(best)
+
+    plt.plot(fitnesses)
+    plt.xlabel("Generation")
+    plt.ylabel("Fitness")
+    plt.title("Fitness over generations")
+    plt.show()
