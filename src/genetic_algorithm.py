@@ -15,6 +15,7 @@ class GeneticAlgorithm:
         generations=100,
         genes=None,
         fitness_function=None,
+        fitness_sharing=None,
         init_population=None,
         min_dna_length=None,
         max_dna_length=None,
@@ -26,6 +27,7 @@ class GeneticAlgorithm:
         self.selection_rate = selection_rate
         self.generations = generations
         self.fitness_function = fitness_function
+        self.fitness_sharing = fitness_sharing
         self.init_population = init_population
         self.elite_rate = elite_rate
         self.min_dna_length = min_dna_length
@@ -88,7 +90,7 @@ class GeneticAlgorithm:
         target_size = self.population_size - int(self.population_size * self.elite_rate)
         while len(crossover_population) < target_size:
 
-            child = self.create_offspring(population, 2)
+            child = self.create_offspring(population, 3)
 
             crossover_population.append(self.mutate(child))
 
@@ -110,13 +112,35 @@ class GeneticAlgorithm:
         print(sorted([len(pop) for pop in self.population]))
         for _ in ft_progress(range(self.generations)):
 
+            raw_fitnesses = [self.fitness_function(ind) for ind in self.population]
+
+            shared_fitnesses = self.fitness_sharing(
+                self.population,
+                raw_fitnesses,
+            )
+
+            # 4) Selection using shared_fitnesses
+            # Example: Sort and pick top half
+            zipped = list(zip(self.population, shared_fitnesses))
+            zipped.sort(key=lambda x: x[1], reverse=True)
+            # keep top half
+            half = int(self.population_size * self.selection_rate)
+            parents = [zipped[i][0] for i in range(half)]
+
             self.sort_population()
+            # print each individual fitness
+            for ind in self.population:
+                print(
+                    int(self.fitness_function(ind) * 1000),
+                    end=", ",
+                )
+            print()
             fitnesses.append(self.fitness_function(self.population[0]))
 
-            parent_population = self.parent_selection()
+            # parent_population = self.parent_selection()
             elite_population = self.elite_selection()
 
-            crossover_population = self.crossover_generation(parent_population)
+            crossover_population = self.crossover_generation(parents)
 
             self.population = crossover_population + elite_population
 

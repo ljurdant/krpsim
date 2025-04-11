@@ -134,6 +134,41 @@ def get_resource_hierarchy(
     return hierarchy_dict
 
 
+def hamming_distance(ind1: str, ind2: str) -> float:
+    """Calculate the Hamming distance between two individuals."""
+    if len(ind1) > len(ind2):
+        ind1 = ind1[: len(ind2)]
+    elif len(ind2) > len(ind1):
+        ind2 = ind2[: len(ind1)]
+    return sum(el1 != el2 for el1, el2 in zip(ind1, ind2)) / len(ind1)
+
+
+def get_sharing_score(
+    population: List[str],
+    raw_fitness: List[float],
+    sigma_share=0.8,
+) -> float:
+    N = len(population)
+    adjusted_fitnesses = [0.0] * N
+
+    for i in range(N):
+        # Calculate the "sharing sum" for individual i
+        sharing_sum = 0.0
+        for j in range(N):
+            dist_ij = hamming_distance(population[i], population[j])
+            if dist_ij < sigma_share:
+                sharing_sum += 1.0 - dist_ij / sigma_share
+        # Avoid division by zero
+        if sharing_sum > 0:
+            adjusted_fitnesses[i] = raw_fitness[i] / sharing_sum
+        else:
+            # If sharing_sum == 0, it means no neighbors within sigma_share,
+            # so we just keep the raw fitness
+            adjusted_fitnesses[i] = raw_fitness[i]
+
+    return adjusted_fitnesses
+
+
 def get_score(
     individual: List[Process],
     processes,
@@ -214,7 +249,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    _max = min(_max, 1000)
+    _max = min(_max, 3000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -229,13 +264,16 @@ if __name__ == "__main__":
             individual, processes_copy, stock_copy, optimize_copy, hierarchy
         )
 
+    def fitness_sharing(population, raw_fitness):
+        return get_sharing_score(population, raw_fitness)
+
     def init_population_with_sgs(pop_size):
         population = []
-        for _ in range(pop_size // 2):
+        for _ in range(3 * pop_size // 10):
             individual = generate_feasible_individual(processes, stock, _max)
             population.append(individual)
 
-        for _ in range(pop_size - pop_size // 2):
+        for _ in range(pop_size - 3 * pop_size // 10):
             individual = generate_random_individual(processes, _min, _max)
             population.append(individual)
 
@@ -243,12 +281,13 @@ if __name__ == "__main__":
 
     ga = GeneticAlgorithm(
         population_size=500,
-        crossover_rate=0.7,
-        elite_rate=0.05,
-        selection_rate=0.3,
-        mutation_rate=0.02,
+        crossover_rate=0.6,
+        elite_rate=0.01,
+        selection_rate=0.5,
+        mutation_rate=0.01,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
+        fitness_sharing=fitness_sharing,
         init_population=init_population_with_sgs,
         generations=100,
         min_dna_length=_min,

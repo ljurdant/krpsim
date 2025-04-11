@@ -2,7 +2,7 @@ import sys
 import re
 import ast  # for safely parsing the Python list from the tasks file
 
-from krpsim import can_run_task, run_task
+from krpsim import can_run_task, do_process
 from parser import parse
 
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
             continue
         proc = processes[task_name]
         if can_run_task(stock, proc["need"]):
-            run_task(stock, proc)
+            do_process(task_name, processes, stock)
             total_time += proc["time"]
         else:
             print(f"[WARNING] Insufficient resources for '{task_name}'. Skipping.")
