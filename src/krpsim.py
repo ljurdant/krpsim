@@ -91,7 +91,7 @@ def generate_random_individual(
 ) -> List[str]:
 
     task_names = list(processes.keys())  # Genes
-    length = random.randint(min_length, max_length)
+    length = random.randint(int(3 * max_length / 4), max_length)
     chromosome = [random.choice(task_names) for _ in range(length)]
 
     return chromosome
@@ -214,7 +214,7 @@ if __name__ == "__main__":
         _min = _min + tmp_min
         _max = _max + tmp_max
 
-    _max = min(_max, 1000)
+    _max = min(_max, 1800)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
@@ -229,9 +229,28 @@ if __name__ == "__main__":
             individual, processes_copy, stock_copy, optimize_copy, hierarchy
         )
 
+    def cleanup_individuals(individuals):
+        for individual in individuals:
+            copy_stock = stock.copy()
+            i = 0
+            j = 0
+            while i < len(individual) and j < len(individual):
+                while i < len(individual) and can_run_task(
+                    copy_stock, processes[individual[i]]["need"]
+                ):
+                    do_process(individual[i], processes, copy_stock)
+                    i += 1
+                    j += 1
+                if i >= len(individual):
+                    break
+                individual = individual[:i] + individual[i + 1 :] + [individual[i]]
+                j += 1
+
+        return individuals
+
     def init_population_with_sgs(pop_size):
         population = []
-        rand_portion = 0.7
+        rand_portion = 0.9
         rand_pop_size = int(pop_size * rand_portion)
         feasible_pop_size = pop_size - rand_pop_size
 
@@ -246,21 +265,26 @@ if __name__ == "__main__":
         return population
 
     ga = GeneticAlgorithm(
-        population_size=300,
+        population_size=1000,
         crossover_rate=0.6,
         elite_rate=0.01,
         selection_rate=0.5,
-        mutation_rate=0.01,
+        mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=100,
+        generations=10,
         parent_selection_type="tournament",
-        selection_pressure=8,
+        selection_pressure=2,
         tournament_probability=0.7,
         crossover_point="uniform",
         min_dna_length=_min,
         max_dna_length=_max,
+        cleanup_individuals=cleanup_individuals,
+        # New hypermutation parameters:
+        hypermutation_factor=0.05,  # how many times to multiply the mutation rate
+        hypermutation_trigger_gens=3,  # how many generations of no improvement before we trigger
+        hypermutation_duration=2,  # how many generations to keep hypermutation on
     )
 
     best, fitnesses = ga.run()

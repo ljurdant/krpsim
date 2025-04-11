@@ -17,11 +17,17 @@ class GeneticAlgorithm:
         tournament_probability=0.9,
         parent_selection_type="random",
         crossover_point="single",
+        cleanup_individuals=None,
         genes=None,
         fitness_function=None,
         init_population=None,
         min_dna_length=None,
         max_dna_length=None,
+        # New hypermutation parameters:
+        hypermutation_factor=3.0,  # how many times to multiply the mutation rate
+        hypermutation_trigger_gens=5,  # how many generations of no improvement before we trigger
+        hypermutation_duration=2,  # how many generations to keep hypermutation on
+        random_immigrant_rate=0.05,
     ):
         self.population_size = population_size
         self.population = []
@@ -39,6 +45,19 @@ class GeneticAlgorithm:
         self.min_dna_length = min_dna_length
         self.max_dna_length = max_dna_length
         self.genes = genes if genes is not None else []
+        self.cleanup_individuals = cleanup_individuals
+        # ... existing init ...
+        self.hypermutation_factor = hypermutation_factor
+        self.hypermutation_trigger_gens = hypermutation_trigger_gens
+        self.hypermutation_duration = hypermutation_duration
+
+        # Track improvement
+        self.generations_since_improvement = 0
+        self.best_fitness_so_far = None
+        self.hypermutation_active = False
+        self.hypermutation_timer = 0
+
+        self.random_immigrant_rate = random_immigrant_rate
 
     def sort_population(self):
         self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
@@ -149,11 +168,21 @@ class GeneticAlgorithm:
 
     def mutate(self, individual):
         """Mutate an individual by randomly changing its genes."""
-        mutated = copy.deepcopy(individual)
-        for i in range(len(mutated)):
-            if random.random() < self.mutation_rate:
-                mutated[i] = random.choice(self.genes)
-        return mutated
+        # If hypermutation is active, multiply the base mutation rate
+        effective_mutation_rate = self.mutation_rate
+        if self.hypermutation_active:
+            effective_mutation_rate *= self.hypermutation_factor
+
+        for i in range(len(individual)):
+            if random.random() < effective_mutation_rate:
+                individual[i] = random.choice(self.genes)
+        return individual
+
+    def _random_individual(self):
+        # your code that returns a random chromosome
+        # for example:
+        length = random.randint(self.min_dna_length, self.max_dna_length)
+        return [random.choice(self.genes) for _ in range(length)]
 
     def run(self):
         """Run the genetic algorithm."""
@@ -163,15 +192,54 @@ class GeneticAlgorithm:
         for _ in ft_progress(range(self.generations)):
             self.sort_population()
 
-            fitnesses.append(self.fitness_function(self.population[0]))
+            current_best_fitness = self.fitness_function(self.population[0])
+
+            # 2) Check for improvement
+            if (
+                self.best_fitness_so_far is None
+                or current_best_fitness > self.best_fitness_so_far
+            ):
+                self.best_fitness_so_far = current_best_fitness
+                self.generations_since_improvement = 0
+                if self.hypermutation_active:
+                    # Turn off hypermutation
+                    print(
+                        f"Hypermutation / hyperselection_pressure OFF at generation {_}"
+                    )
+                    self.hypermutation_active = False
+                    self.selection_pressure = 2
+            else:
+                self.generations_since_improvement += 1
+
+            # 3) Possibly trigger hypermutation
+            if not self.hypermutation_active:
+                if (
+                    self.generations_since_improvement
+                    >= self.hypermutation_trigger_gens
+                ):
+                    # Turn on hypermutation
+                    self.hypermutation_active = True
+                    self.selection_pressure = 8
+                    # self.hypermutation_timer = self.hypermutation_duration
+                    print(
+                        f"Hypermutation / hyperselection_pressure ON at generation {_}"
+                    )
+            fitnesses.append(current_best_fitness)
 
             parent_population = self.parent_selection()
             elite_population = self.elite_selection()
 
             crossover_population = self.crossover_generation(parent_population)
+            crossover_population = self.cleanup_individuals(crossover_population)
+            new_generation = crossover_population + elite_population
 
-            self.population = crossover_population + elite_population
-
+            if self.hypermutation_active:
+                immigrant_count = int(self.population_size * self.random_immigrant_rate)
+                for _ in range(immigrant_count):
+                    rand_idx = random.randint(0, len(new_generation) - 1)
+                    # create_random_individual or some feasible generator
+                    new_generation[rand_idx] = self._random_individual()
+            self.population = new_generation
             # cleanup population
         best = max(self.population, key=lambda x: self.fitness_function(x))
         fitnesses.append(self.fitness_function(best))
