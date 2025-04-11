@@ -1,4 +1,6 @@
 results/
+src/tests/
+src/analysis.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
