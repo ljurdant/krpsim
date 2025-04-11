@@ -231,42 +231,50 @@ if __name__ == "__main__":
 
     def init_population_with_sgs(pop_size):
         population = []
-        for _ in range(pop_size // 2):
+        rand_portion = 0.7
+        rand_pop_size = int(pop_size * rand_portion)
+        feasible_pop_size = pop_size - rand_pop_size
+
+        for _ in range(feasible_pop_size):
             individual = generate_feasible_individual(processes, stock, _max)
             population.append(individual)
 
-        for _ in range(pop_size - pop_size // 2):
+        for _ in range(rand_pop_size):
             individual = generate_random_individual(processes, _min, _max)
             population.append(individual)
 
         return population
 
     ga = GeneticAlgorithm(
-        population_size=500,
-        crossover_rate=0.7,
-        elite_rate=0.05,
-        selection_rate=0.3,
-        mutation_rate=0.02,
+        population_size=300,
+        crossover_rate=0.6,
+        elite_rate=0.01,
+        selection_rate=0.5,
+        mutation_rate=0.01,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
         generations=100,
+        parent_selection_type="tournament",
+        selection_pressure=8,
+        tournament_probability=0.7,
+        crossover_point="uniform",
         min_dna_length=_min,
         max_dna_length=_max,
     )
 
     best, fitnesses = ga.run()
+
     fitness = fitness_function(best)
     print("Best fitness:", fitness)
 
-    # print("Best individual:", best, len(best))
+    print("Best individual:", best, len(best))
     valid_best = []
     copy = stock.copy()
     for process in best:
         _, success = do_process(process, processes, copy)
         if success:
             valid_best.append(process)
-    print("Best individual:", valid_best, len(valid_best))
     print(
         "Stock after best individual:",
         get_stock_after_individual(best, processes, stock.copy()),
@@ -278,14 +286,13 @@ if __name__ == "__main__":
     print("Time:", current_time)
 
     json.dump(
-        best,
+        valid_best,
         open(
             f"../results/{config_file.split('/')[-1]}_{fitness*100:.2f}_{current_time}.json",
             "w",
         ),
         indent=4,
     )
-
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")
