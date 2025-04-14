@@ -1,7 +1,5 @@
-import threading
 from loading import ft_progress
 import random
-import copy
 
 
 class GeneticAlgorithm:
@@ -230,7 +228,7 @@ class GeneticAlgorithm:
             elite_population = self.elite_selection()
 
             crossover_population = self.crossover_generation(parent_population)
-            crossover_population = self.cleanup_individuals(crossover_population)
+            # crossover_population = self.cleanup_individuals(crossover_population)
             new_generation = crossover_population + elite_population
 
             if self.hypermutation_active:
