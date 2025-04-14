@@ -37,11 +37,10 @@ def do_process(
         if stock.get(resource, 0) < amount:
             return result
 
-    for (consumed_resource, amount_consumed), (
-        produced_resource,
-        amount_produced,
-    ) in zip(process["need"].items(), process["result"].items()):
+    for consumed_resource, amount_consumed in process["need"].items():
         result["consumed"][consumed_resource] = amount_consumed
+
+    for produced_resource, amount_produced in process["result"].items():
         result["produced"][produced_resource] = amount_produced
 
     return result
@@ -171,13 +170,11 @@ def get_score(
                 min_amount_possible = min(min_amount_possible, resource_possible)
         real_amount = min(process_amount, min_amount_possible)
 
-        for (consumed_resource, amount_consumed), (
-            produced_resource,
-            amount_produced,
-        ) in zip(resource_diff["consumed"].items(), resource_diff["produced"].items()):
+        for consumed_resource, amount_consumed in resource_diff["consumed"].items():
             stock[consumed_resource] = (
                 stock.get(consumed_resource, 0) - amount_consumed * real_amount
             )
+        for produced_resource, amount_produced in resource_diff["produced"].items():
             stock[produced_resource] = (
                 stock.get(produced_resource, 0) + amount_produced * real_amount
             )
@@ -253,15 +250,11 @@ def get_stock_after_individual(
     for process in individual:
         for i in range(process["amount"]):
             resource_diff = do_process(process["process"], processes, stock)
-            for (consumed_resource, amount_consumed), (
-                produced_resource,
-                amount_produced,
-            ) in zip(
-                resource_diff["consumed"].items(), resource_diff["produced"].items()
-            ):
+            for consumed_resource, amount_consumed in resource_diff["consumed"].items():
                 stock[consumed_resource] = (
                     stock.get(consumed_resource, 0) - amount_consumed
                 )
+            for produced_resource, amount_produced in resource_diff["produced"].items():
                 stock[produced_resource] = (
                     stock.get(produced_resource, 0) + amount_produced
                 )
