@@ -20,8 +20,6 @@ class GeneticAlgorithm:
         genes=None,
         fitness_function=None,
         init_population=None,
-        min_dna_length=None,
-        max_dna_length=None,
     ):
         self.population_size = population_size
         self.population = []
@@ -36,8 +34,6 @@ class GeneticAlgorithm:
         self.tournament_probability = tournament_probability
         self.parent_selection_type = parent_selection_type
         self.crossover_point = crossover_point
-        self.min_dna_length = min_dna_length
-        self.max_dna_length = max_dna_length
         self.genes = genes if genes is not None else []
 
     def sort_population(self):
@@ -55,11 +51,69 @@ class GeneticAlgorithm:
         return self.population[:elite_count]
 
     def single_point_crossover(self, individual1, individual2):
-        crossover_point = min(
-            random.randint(1, max(len(individual1), len(individual2)) - 1),
-            min(len(individual1), len(individual2)) - 1,
-        )
-        return individual1[:crossover_point] + individual2[crossover_point:]
+        dna_length = sum(gene["amount"] for gene in individual1)
+        crossover_point = random.randint(0, dna_length - 1)
+        child = []
+
+        total_length = 0
+        i = 0
+        while total_length < crossover_point:
+            if total_length + individual1[i]["amount"] > crossover_point:
+                amount1 = crossover_point - total_length
+                if len(child) and individual1[i]["process"] == child[-1]["process"]:
+                    child[-1]["amount"] += amount1
+                else:
+                    child.append(
+                        {
+                            "process": individual1[i]["process"],
+                            "amount": amount1,
+                        }
+                    )
+
+                break
+            else:
+                child.append(
+                    {
+                        "process": individual1[i]["process"],
+                        "amount": individual1[i]["amount"],
+                    }
+                )
+                total_length += individual1[i]["amount"]
+                i += 1
+
+        total_length = 0
+        i = 0
+        while total_length < crossover_point:
+            if total_length + individual2[i]["amount"] > crossover_point:
+                amount2 = total_length + individual2[i]["amount"] - crossover_point
+                if len(child) and individual2[i]["process"] == child[-1]["process"]:
+                    child[-1]["amount"] += amount2
+                else:
+                    child.append(
+                        {
+                            "process": individual2[i]["process"],
+                            "amount": amount2,
+                        }
+                    )
+                i += 1
+                break
+            else:
+                total_length += individual2[i]["amount"]
+                i += 1
+
+        if i < len(individual2):
+            for gene in individual2[i:]:
+                if len(child) and gene["process"] == child[-1]["process"]:
+                    child[-1]["amount"] += gene["amount"]
+                else:
+                    child.append(
+                        {
+                            "process": gene["process"],
+                            "amount": gene["amount"],
+                        }
+                    )
+
+        return child
 
     def uniform_crossover(self, individual1, individual2):
         """Perform uniform crossover between two selected individuals and return two children."""
@@ -149,10 +203,19 @@ class GeneticAlgorithm:
 
     def mutate(self, individual):
         """Mutate an individual by randomly changing its genes."""
-        mutated = copy.deepcopy(individual)
-        for i in range(len(mutated)):
+        mutated = []
+        for gene in individual:
             if random.random() < self.mutation_rate:
-                mutated[i] = random.choice(self.genes)
+
+                mutated.append(
+                    {
+                        "process": random.choice(self.genes),
+                        "amount": gene["amount"],
+                    }
+                )
+            else:
+                mutated.append(gene)
+
         return mutated
 
     def run(self):
@@ -167,9 +230,7 @@ class GeneticAlgorithm:
 
             parent_population = self.parent_selection()
             elite_population = self.elite_selection()
-
             crossover_population = self.crossover_generation(parent_population)
-
             self.population = crossover_population + elite_population
 
             # cleanup population

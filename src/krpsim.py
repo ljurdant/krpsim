@@ -28,31 +28,29 @@ def can_run_task(stock: dict[str, int], needs: dict[str, int]) -> bool:
 
 def do_process(
     process_name: str, processes: dict[str, Process], stock: dict[str, int]
-) -> int:
+) -> dict[str, dict[str, int]]:
     """Do a process and update the stock."""
     # Check if we have enough resources
     process = processes[process_name]
-
+    result = {"consumed": {}, "produced": {}}
     for resource, amount in process["need"].items():
         if stock.get(resource, 0) < amount:
-            return 0, False
+            return result
 
-    # Update the stock
-    for resource, amount in process["need"].items():
-        stock[resource] -= amount
+    for consumed_resource, amount_consumed in process["need"].items():
+        result["consumed"][consumed_resource] = amount_consumed
 
-    # Add the result to the stock
-    for resource, amount in process["result"].items():
-        stock[resource] = stock.get(resource, 0) + amount
+    for produced_resource, amount_produced in process["result"].items():
+        result["produced"][produced_resource] = amount_produced
 
-    return process["time"], True
+    return result
 
 
 def generate_feasible_individual(
     processes: dict[str, Process],
-    initial_stock: dict[str, int],
+    initial_stock: dict[str, int | str],
     max_length=30,
-) -> List[str]:
+) -> List[dict[str, int]]:
     """
     Returns a random feasible chromosome built via SGS,
     stopping when no more tasks are feasible or max_length is reached.
@@ -86,14 +84,29 @@ def generate_feasible_individual(
 
 def generate_random_individual(
     processes: dict[str, Process],
+    length,
     min_length: int = 0,
     max_length=30,
-) -> List[str]:
+) -> List[dict[str, int]]:
 
-    task_names = list(processes.keys())  # Genes
-    length = random.randint(min_length, max_length)
-    chromosome = [random.choice(task_names) for _ in range(length)]
+    # task_names = list(processes.keys())  # Genes
+    # length = random.randint(min_length, max_length)
+    # chromosome = [random.choice(task_names) for _ in range(length)]
+    chromosome = []
+    total_length = 0
+    while total_length < length:
+        # Randomly select one feasible task
+        chosen_task = random.choice(list(processes.keys()))
 
+        # Append to chromosome
+        task_length = random.randint(min_length, max_length)
+        task_length = min(task_length, length - total_length)
+
+        chromosome.append({"amount": task_length, "process": chosen_task})
+        total_length += task_length
+    if sum(gene["amount"] for gene in chromosome) != length:
+        print("chromosome", chromosome)
+        raise Exception("stop")
     return chromosome
 
 
@@ -135,25 +148,49 @@ def get_resource_hierarchy(
 
 
 def get_score(
-    individual: List[Process],
+    individual: List[dict[str, int]],
     processes,
     stock: dict[str, int],
     optimize: List[str],
-    hierarchy: dict[str, float],
 ) -> float:
 
     total_time = 0
-    valid_count = 0
-    for process_name in individual:
-        time_taken, success = do_process(process_name, processes, stock)
-        total_time += time_taken
-        valid_count += int(success)
-        # if not success:
-        # break
+    for gene in individual:
+        process_name = gene["process"]
+        process_amount = gene["amount"]
 
+        resource_diff = do_process(process_name, processes, stock)
+
+        min_amount_possible = 0
+        for resource, amount in resource_diff["consumed"].items():
+            resource_possible = stock.get(resource, 0) // amount
+            if min_amount_possible == 0:
+                min_amount_possible = resource_possible
+            else:
+                min_amount_possible = min(min_amount_possible, resource_possible)
+        real_amount = min(process_amount, min_amount_possible)
+
+        for consumed_resource, amount_consumed in resource_diff["consumed"].items():
+            stock[consumed_resource] = (
+                stock.get(consumed_resource, 0) - amount_consumed * real_amount
+            )
+        for produced_resource, amount_produced in resource_diff["produced"].items():
+            stock[produced_resource] = (
+                stock.get(produced_resource, 0) + amount_produced * real_amount
+            )
+        total_time += real_amount * processes[process_name]["time"]
+
+        # print(process_name, stock)
+
+    # resources_count = sum(
+    #     ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
+    # )
     resources_count = sum(
-        ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
+        stock.get(resource, 0) for resource in stock.keys() if resource in optimize
     )
+
+    # resource_diff = resources_count - initial_resources_count
+    # print(resources_count)
 
     if "time" in optimize:
         return resources_count / total_time if total_time > 0 else 0
@@ -162,12 +199,65 @@ def get_score(
     # I need to add valid_count to the score or something to reward good ressources collected
 
 
+def trim_invalid(
+    individual: List[dict[str, int]], processes, stock: dict[str, int]
+) -> List[dict[str, int]]:
+    valid_individual = []
+    total_time = 0
+
+    for gene in individual:
+        process_name = gene["process"]
+        process_amount = gene["amount"]
+
+        resource_diff = do_process(process_name, processes, stock)
+
+        min_amount_possible = 0
+        for resource, amount in resource_diff["consumed"].items():
+            resource_possible = stock.get(resource, 0) // amount
+            if min_amount_possible == 0:
+                min_amount_possible = resource_possible
+            else:
+                min_amount_possible = min(min_amount_possible, resource_possible)
+        real_amount = min(process_amount, min_amount_possible)
+
+        for (consumed_resource, amount_consumed), (
+            produced_resource,
+            amount_produced,
+        ) in zip(resource_diff["consumed"].items(), resource_diff["produced"].items()):
+            stock[consumed_resource] = (
+                stock.get(consumed_resource, 0) - amount_consumed * real_amount
+            )
+            stock[produced_resource] = (
+                stock.get(produced_resource, 0) + amount_produced * real_amount
+            )
+
+        total_time += real_amount * processes[process_name]["time"]
+        if real_amount > 0:
+            valid_individual.append(
+                {
+                    "process": process_name,
+                    "amount": real_amount,
+                }
+            )
+
+    return valid_individual
+
+
 def get_stock_after_individual(
-    individual: List[Process], processes, stock: dict[str, int]
+    individual: List[dict[str, int]], processes, stock: dict[str, int]
 ) -> dict[str, int]:
 
-    for process_name in individual:
-        do_process(process_name, processes, stock)
+    for process in individual:
+        for i in range(process["amount"]):
+            resource_diff = do_process(process["process"], processes, stock)
+            for consumed_resource, amount_consumed in resource_diff["consumed"].items():
+                stock[consumed_resource] = (
+                    stock.get(consumed_resource, 0) - amount_consumed
+                )
+            for produced_resource, amount_produced in resource_diff["produced"].items():
+                stock[produced_resource] = (
+                    stock.get(produced_resource, 0) + amount_produced
+                )
 
     return stock
 
@@ -207,60 +297,52 @@ if __name__ == "__main__":
     config_file = sys.argv[1]
     stock, processes, optimize = parse(config_file)
 
-    _min = 0
-    _max = 0
-    for opt in optimize:
-        tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-        _min = _min + tmp_min
-        _max = _max + tmp_max
+    _min = 1
+    _max = 100
+    # for opt in optimize:
+    #     tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
+    #     _min = _min + tmp_min
+    #     _max = _max + tmp_max
 
-    _max = min(_max, 1000)
+    # _max = min(_max, 1000)
 
     print("Min gene length:", _min)
     print("Max gene length:", _max)
-    hierarchy = get_resource_hierarchy(processes, optimize)
-    print("Hierarchy:", hierarchy)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
         processes_copy = processes.copy()
         optimize_copy = optimize.copy()
-        return get_score(
-            individual, processes_copy, stock_copy, optimize_copy, hierarchy
-        )
+        return get_score(individual, processes_copy, stock_copy, optimize_copy)
 
     def init_population_with_sgs(pop_size):
         population = []
-        rand_portion = 0.7
+        rand_portion = 1
         rand_pop_size = int(pop_size * rand_portion)
-        feasible_pop_size = pop_size - rand_pop_size
+        # feasible_pop_size = pop_size - rand_pop_size
 
-        for _ in range(feasible_pop_size):
-            individual = generate_feasible_individual(processes, stock, _max)
-            population.append(individual)
+        # for _ in range(feasible_pop_size):
+        #     individual = generate_feasible_individual(processes, stock, _max)
+        #     population.append(individual)
 
         for _ in range(rand_pop_size):
-            individual = generate_random_individual(processes, _min, _max)
+            individual = generate_random_individual(processes, 10000, _min, _max)
             population.append(individual)
 
         return population
 
     ga = GeneticAlgorithm(
-        population_size=300,
-        crossover_rate=0.6,
+        population_size=100,
+        crossover_rate=0.7,
         elite_rate=0.01,
-        selection_rate=0.5,
-        mutation_rate=0.01,
+        selection_rate=0.7,
+        mutation_rate=0.02,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=100,
-        parent_selection_type="tournament",
-        selection_pressure=8,
-        tournament_probability=0.7,
-        crossover_point="uniform",
-        min_dna_length=_min,
-        max_dna_length=_max,
+        generations=1000,
+        parent_selection_type="random",
+        crossover_point="single",
     )
 
     best, fitnesses = ga.run()
@@ -268,16 +350,11 @@ if __name__ == "__main__":
     fitness = fitness_function(best)
     print("Best fitness:", fitness)
 
-    print("Best individual:", best, len(best))
-    valid_best = []
-    copy = stock.copy()
-    for process in best:
-        _, success = do_process(process, processes, copy)
-        if success:
-            valid_best.append(process)
+    # print("Best individual:", best, len(best))
+    valid_best = trim_invalid(best, processes, stock.copy())
     print(
         "Stock after best individual:",
-        get_stock_after_individual(best, processes, stock.copy()),
+        get_stock_after_individual(valid_best, processes, stock.copy()),
     )
 
     now = datetime.now()
