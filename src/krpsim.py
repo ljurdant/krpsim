@@ -303,7 +303,6 @@ if __name__ == "__main__":
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
         _max = _max + tmp_max
     _min = 1
-    _max = _max
     _max = min(_max, 50000)
 
     def fitness_function(individual):
