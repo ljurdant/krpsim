@@ -244,17 +244,14 @@ def trim_invalid(
                 min_amount_possible = min(min_amount_possible, resource_possible)
         real_amount = min(process_amount, min_amount_possible)
 
-        for (consumed_resource, amount_consumed), (
-            produced_resource,
-            amount_produced,
-        ) in zip(resource_diff["consumed"].items(), resource_diff["produced"].items()):
+        for consumed_resource, amount_consumed in resource_diff["consumed"].items():
             stock[consumed_resource] = (
                 stock.get(consumed_resource, 0) - amount_consumed * real_amount
             )
+        for produced_resource, amount_produced in resource_diff["produced"].items():
             stock[produced_resource] = (
                 stock.get(produced_resource, 0) + amount_produced * real_amount
             )
-
         total_time += real_amount * processes[process_name]["time"]
         if real_amount > 0:
             valid_individual.append(
@@ -314,11 +311,15 @@ def get_min_max_gene_length(
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <path_to_krpsim_config>")
+    if len(sys.argv) < 3:
+        print("Usage: python main.py <path_to_krpsim_config> <max_execution_time(sec)>")
         sys.exit(1)
 
     config_file = sys.argv[1]
+    max_execution_time = int(sys.argv[2])
+    if max_execution_time < 1:
+        print("max_execution_time must be greater than 0")
+        sys.exit(1)
     stock, processes, optimize = parse(config_file)
 
     _min = 1
@@ -359,7 +360,7 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        time_limit=30,
+        time_limit=max_execution_time,
         parent_selection_type="random",
         crossover_point="single",
         hyper_mutation_rate=0.03,
