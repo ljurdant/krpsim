@@ -165,11 +165,13 @@ def get_score(
     processes,
     stock: dict[str, int],
     optimize: List[str],
+    hierarchy: dict[str, List[str]],
 ) -> float:
 
     init_resources_count = sum(
-        stock.get(resource, 0) for resource in stock.keys() if resource in optimize
+        stock.get(resource, 0) * hierarchy.get(resource, 0) for resource in stock.keys()
     )
+    # init_resources_count = sum(stock.get(resource, 0) for resource in optimize)
 
     total_time = 0
     for gene in individual:
@@ -198,29 +200,17 @@ def get_score(
         if real_amount > 0:
             total_time += processes[process_name]["time"]
 
-        # print(process_name, stock)
-
-    # resources_count = sum(
-    #     ((stock.get(resource, 0) * hierarchy[resource])) for resource in stock.keys()
-    # )
+    # resources_count = sum(stock.get(resource, 0) for resource in optimize)
     resources_count = sum(
-        stock.get(resource, 0) for resource in stock.keys() if resource in optimize
+        stock.get(resource, 0) * hierarchy.get(resource, 0) for resource in stock.keys()
     )
 
     resource_diff = resources_count - init_resources_count
-
-    # resource_diff = resources_count - initial_resources_count
-    # print(resources_count)
-
-    # return resource_diff
-    # return resources_count
 
     if "time" in optimize:
         return resource_diff / total_time if total_time > 0 else 0
     else:
         return resource_diff
-    # return resources_count  # + valid_count / len(individual)
-    # I need to add valid_count to the score or something to reward good ressources collected
 
 
 def trim_invalid(
@@ -330,19 +320,18 @@ if __name__ == "__main__":
     _min = 1
     _max = min(_max, 50000)
 
+    hierarchy = get_resource_hierarchy(processes, optimize)
+
     def fitness_function(individual):
         stock_copy = stock.copy()
-        return get_score(individual, processes, stock_copy, optimize)
+
+        return get_score(individual, processes, stock_copy, optimize, hierarchy)
 
     def init_population_with_sgs(pop_size):
         population = []
         rand_portion = 1
         rand_pop_size = int(pop_size * rand_portion)
-        # feasible_pop_size = pop_size - rand_pop_size
 
-        # for _ in range(feasible_pop_size):
-        #     individual = generate_feasible_individual(processes, stock, _max)
-        #     population.append(individual)
         for _ in range(rand_pop_size):
             individual = generate_random_individual(
                 processes, _max, _min, max(_max // 100, 1)
