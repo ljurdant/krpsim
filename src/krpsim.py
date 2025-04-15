@@ -133,7 +133,7 @@ def get_resource_hierarchy(
     )
 
     hierarchy_dict = {}
-    for opt in optimize:
+    for opt in [opt for opt in optimize if opt != "time"]:
         hierarchy_dict[opt] = 1
 
     while hierarchy_dict.keys() != resources:
@@ -156,7 +156,6 @@ def get_resource_hierarchy(
 
     for opt in optimize:
         hierarchy_dict[opt] = 2
-
     return hierarchy_dict
 
 
