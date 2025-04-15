@@ -14,4 +14,4 @@ forge_blade:(steel:1;bronze:1;energy:2):(blade:1):2
 recycle_scrap:(blade:1):(iron:1;copper:1):2
 
 # Optimization goal
-optimize:(time;blade)
+optimize:(blade;time)

@@ -302,7 +302,7 @@ def get_min_max_gene_length(
             for resource, amount in process["need"].items():
                 if resource in stock:
                     min_length += 1
-                    max_length *= amount
+                    max_length += amount
                 else:
                     min_length, max_length = get_min_max_gene_length(
                         min_length + 1, max_length * amount, processes, resource, stock
@@ -327,7 +327,7 @@ if __name__ == "__main__":
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
         _max = _max + tmp_max
     _min = 1
-    _max = min(_max, 100000)
+    _max = min(_max, 50000)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -359,7 +359,7 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        time_limit=30,
+        time_limit=5,
         parent_selection_type="random",
         crossover_point="single",
         hyper_mutation_rate=0.03,
