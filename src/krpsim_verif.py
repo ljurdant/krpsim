@@ -126,13 +126,11 @@ def main():
     # 4) Group tasks by cycle so that all tasks with the same cycle run in parallel
     from itertools import groupby
 
-    # groupby wants a key function; we already sorted by cycle
-    grouped = [(key, list(group)) for key, group in groupby(tasks, key=lambda x: x[0])]
-
     current_real_cycle = 0
 
     # 5) Process each group in ascending cycle order
-    for cycle, tasks_in_group in grouped:
+    for cycle, tasks_in_group in groupby(tasks, key=lambda x: x[0]):
+
         # If the user tries to schedule tasks at a cycle < current_real_cycle, that's invalid
         if cycle < current_real_cycle:
             print(
@@ -143,11 +141,11 @@ def main():
 
         # Gather just the task names in this group
         task_names = [task_name for _, task_name in tasks_in_group]
-
         # Check if we have enough resources to run them in parallel
+
         if not can_run_tasks_in_parallel(stock, processes, task_names):
             print(
-                f"Error: Not enough resources to run tasks {task_names} in parallel at cycle {cycle}."
+                f"Error: Not enough resources to run tasks {set(task_names)} in parallel at cycle {cycle}."
             )
             continue
 

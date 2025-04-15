@@ -78,6 +78,7 @@ class GeneticAlgorithm:
                         {
                             "process": individual1[i]["process"],
                             "amount": amount1,
+                            "parallel": individual1[i]["parallel"],
                         }
                     )
 
@@ -87,6 +88,7 @@ class GeneticAlgorithm:
                     {
                         "process": individual1[i]["process"],
                         "amount": individual1[i]["amount"],
+                        "parallel": individual1[i]["parallel"],
                     }
                 )
                 total_length += individual1[i]["amount"]
@@ -104,6 +106,7 @@ class GeneticAlgorithm:
                         {
                             "process": individual2[i]["process"],
                             "amount": amount2,
+                            "parallel": individual2[i]["parallel"],
                         }
                     )
                 i += 1
@@ -121,6 +124,7 @@ class GeneticAlgorithm:
                         {
                             "process": gene["process"],
                             "amount": gene["amount"],
+                            "parallel": gene["parallel"],
                         }
                     )
 
@@ -229,6 +233,7 @@ class GeneticAlgorithm:
                     {
                         "process": random.choice(self.genes),
                         "amount": gene["amount"],
+                        "parallel": gene["parallel"],
                     }
                 )
             else:
