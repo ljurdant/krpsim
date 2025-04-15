@@ -98,7 +98,7 @@ def generate_feasible_individual(
 def generate_random_individual(
     processes: dict[str, Process],
     length,
-    min_length: int = 0,
+    min_length=1,
     max_length=30,
 ) -> List[dict[str, int]]:
 
@@ -167,6 +167,10 @@ def get_score(
     optimize: List[str],
 ) -> float:
 
+    init_resources_count = sum(
+        stock.get(resource, 0) for resource in stock.keys() if resource in optimize
+    )
+
     total_time = 0
     for gene in individual:
         process_name = gene["process"]
@@ -191,7 +195,8 @@ def get_score(
             stock[produced_resource] = (
                 stock.get(produced_resource, 0) + amount_produced * real_amount
             )
-        total_time += processes[process_name]["time"]
+        if real_amount > 0:
+            total_time += processes[process_name]["time"]
 
         # print(process_name, stock)
 
@@ -202,12 +207,18 @@ def get_score(
         stock.get(resource, 0) for resource in stock.keys() if resource in optimize
     )
 
+    resource_diff = resources_count - init_resources_count
+
     # resource_diff = resources_count - initial_resources_count
     # print(resources_count)
 
-    # if "time" in optimize:
-    return resources_count / total_time if total_time > 0 else 0
-    # else:
+    # return resource_diff
+    # return resources_count
+
+    if "time" in optimize:
+        return resource_diff / total_time if total_time > 0 else 0
+    else:
+        return resource_diff
     # return resources_count  # + valid_count / len(individual)
     # I need to add valid_count to the score or something to reward good ressources collected
 
@@ -316,13 +327,11 @@ if __name__ == "__main__":
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
         _max = _max + tmp_max
     _min = 1
-    _max = min(_max, 50000)
+    _max = min(_max, 100000)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
-        processes_copy = processes.copy()
-        optimize_copy = optimize.copy()
-        return get_score(individual, processes_copy, stock_copy, optimize_copy)
+        return get_score(individual, processes, stock_copy, optimize)
 
     def init_population_with_sgs(pop_size):
         population = []
@@ -333,15 +342,16 @@ if __name__ == "__main__":
         # for _ in range(feasible_pop_size):
         #     individual = generate_feasible_individual(processes, stock, _max)
         #     population.append(individual)
-
         for _ in range(rand_pop_size):
-            individual = generate_random_individual(processes, _max, _min, _max // 10)
+            individual = generate_random_individual(
+                processes, _max, _min, max(_max // 100, 1)
+            )
             population.append(individual)
 
         return population
 
     ga = GeneticAlgorithm(
-        population_size=100,
+        population_size=500,
         crossover_rate=0.7,
         elite_rate=0.01,
         selection_rate=0.7,
@@ -349,14 +359,12 @@ if __name__ == "__main__":
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
-        generations=1000,
         time_limit=30,
         parent_selection_type="random",
         crossover_point="single",
-        min_series_length=_min,
-        selection_pressure=8,
-        tournament_probability=0.9,
-        # max_series_length=_max // 10,
+        hyper_mutation_rate=0.03,
+        hyper_change_frequency=3,
+        hyper_crossover_rate=0.9,
     )
 
     best, fitnesses = ga.run()

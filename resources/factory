@@ -1,0 +1,17 @@
+# Initial stock values
+iron:10
+coal:10
+copper:5
+water:20
+energy:5
+
+# Processes
+smelt_iron:(iron:2;coal:1):(steel:1):2
+smelt_copper:(copper:2;coal:1):(bronze:1):3
+water_treatment:(water:5):(clean_water:4):1
+generate_energy:(coal:2;water:1):(energy:3):1
+forge_blade:(steel:1;bronze:1;energy:2):(blade:1):2
+recycle_scrap:(blade:1):(iron:1;copper:1):2
+
+# Optimization goal
+optimize:(time;blade)

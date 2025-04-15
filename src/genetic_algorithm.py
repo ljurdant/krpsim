@@ -22,8 +22,9 @@ class GeneticAlgorithm:
         fitness_function=None,
         time_limit=None,
         init_population=None,
-        min_series_length=1,
-        max_series_length=10,
+        hyper_mutation_rate=0.01,
+        hyper_crossover_rate=0.7,
+        hyper_change_frequency=100,
     ):
         self.population_size = population_size
         self.population = []
@@ -40,8 +41,11 @@ class GeneticAlgorithm:
         self.crossover_point = crossover_point
         self.genes = genes if genes is not None else []
         self.time_limit = time_limit
-        self.min_series_length = min_series_length
-        self.max_series_length = max_series_length
+        self.best_individual = None
+        self.stagnation_count = 0
+        self.hyper_mutation_rate = hyper_mutation_rate
+        self.hyper_change_frequency = hyper_change_frequency
+        self.hyper_crossover_rate = hyper_crossover_rate
 
     def sort_population(self):
         self.population.sort(key=lambda x: x[1], reverse=True)
@@ -90,7 +94,7 @@ class GeneticAlgorithm:
 
         total_length = 0
         i = 0
-        while total_length < crossover_point and i < len(individual2):
+        while total_length < crossover_point:
             if total_length + individual2[i]["amount"] > crossover_point:
                 amount2 = total_length + individual2[i]["amount"] - crossover_point
                 if len(child) and individual2[i]["process"] == child[-1]["process"]:
@@ -184,8 +188,11 @@ class GeneticAlgorithm:
 
         parent1 = self.get_crossover_parent(population)
         parent2 = self.get_crossover_parent(population)
+        crossover_rate = self.crossover_rate
+        if self.stagnation_count >= self.hyper_change_frequency:
+            crossover_rate = self.hyper_crossover_rate
 
-        if random.random() < self.crossover_rate:
+        if random.random() < crossover_rate:
             child_individual = self.crossover(parent1[0], parent2[0])
             child = (
                 child_individual,
@@ -212,8 +219,11 @@ class GeneticAlgorithm:
         """Mutate an individual by randomly changing its genes."""
         mutated_individual = []
         mutated = False
+        mutation_rate = self.mutation_rate
+        if self.stagnation_count >= self.hyper_change_frequency:
+            mutation_rate = self.hyper_mutation_rate
         for gene in individual[0]:
-            if random.random() < self.mutation_rate:
+            if random.random() < mutation_rate:
                 mutated = True
                 mutated_individual.append(
                     {
@@ -223,6 +233,7 @@ class GeneticAlgorithm:
                 )
             else:
                 mutated_individual.append(gene)
+
         if mutated:
             fitness = self.fitness_function(mutated_individual)
             return mutated_individual, fitness
@@ -236,6 +247,14 @@ class GeneticAlgorithm:
 
         parent_population = self.parent_selection()
         elite_population = self.elite_selection()
+        if (
+            self.best_individual is not None
+            and self.population[0] == self.best_individual
+        ):
+            self.stagnation_count += 1
+        else:
+            self.stagnation_count = 0
+        self.best_individual = self.population[0]
         crossover_population = self.crossover_generation(parent_population)
         self.population = crossover_population + elite_population
 
@@ -254,13 +273,15 @@ class GeneticAlgorithm:
             message = ""
             width = os.get_terminal_size()[0]
             while time.time() < end:
+                self.one_generation()
                 if generations >= 1:
                     moveup = "\033[A"
                     print(moveup * int(len(message) / width + 1))
-                message = f"ETA {end - time.time():2.0f}s : Generation {generations}"
+                fitness = self.best_individual[1]
+                message = f"ETA {end - time.time():2.0f}s : Generation {generations:4.0f} | Best fitness {fitness:3.2f} "
                 print(message, end="\r")
                 generations += 1
-                self.one_generation()
+            print()
             print(f"Time limit reached after {generations} generations")
         else:
             for _ in ft_progress(range(self.generations)):
