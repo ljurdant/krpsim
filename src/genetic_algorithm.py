@@ -1,6 +1,7 @@
-import threading
 from loading import ft_progress
 import random
+import time
+import os
 import copy
 
 
@@ -19,7 +20,10 @@ class GeneticAlgorithm:
         crossover_point="single",
         genes=None,
         fitness_function=None,
+        time_limit=None,
         init_population=None,
+        min_series_length=1,
+        max_series_length=10,
     ):
         self.population_size = population_size
         self.population = []
@@ -35,9 +39,12 @@ class GeneticAlgorithm:
         self.parent_selection_type = parent_selection_type
         self.crossover_point = crossover_point
         self.genes = genes if genes is not None else []
+        self.time_limit = time_limit
+        self.min_series_length = min_series_length
+        self.max_series_length = max_series_length
 
     def sort_population(self):
-        self.population.sort(key=lambda x: self.fitness_function(x), reverse=True)
+        self.population.sort(key=lambda x: x[1], reverse=True)
 
     def parent_selection(self):
         """Select the best individuals from the population."""
@@ -83,7 +90,7 @@ class GeneticAlgorithm:
 
         total_length = 0
         i = 0
-        while total_length < crossover_point:
+        while total_length < crossover_point and i < len(individual2):
             if total_length + individual2[i]["amount"] > crossover_point:
                 amount2 = total_length + individual2[i]["amount"] - crossover_point
                 if len(child) and individual2[i]["process"] == child[-1]["process"]:
@@ -162,9 +169,7 @@ class GeneticAlgorithm:
         p = self.tournament_probability
         # Randomly choose k individuals
         tournament_contestants = random.sample(population, self.selection_pressure)
-        tournament_contestants.sort(
-            key=lambda x: self.fitness_function(x), reverse=True
-        )
+        tournament_contestants.sort(key=lambda x: x[1], reverse=True)
         weights = [p * ((1 - p) ** i) for i in range(len(tournament_contestants))]
         return random.choices(population=tournament_contestants, k=1, weights=weights)[
             0
@@ -181,11 +186,13 @@ class GeneticAlgorithm:
         parent2 = self.get_crossover_parent(population)
 
         if random.random() < self.crossover_rate:
-            child = self.crossover(parent1, parent2)
-        else:
-            child = max(
-                [parent1[:], parent2[:]], key=lambda x: self.fitness_function(x)
+            child_individual = self.crossover(parent1[0], parent2[0])
+            child = (
+                child_individual,
+                self.fitness_function(child_individual),
             )
+        else:
+            child = max(parent1, parent2, key=lambda x: x[1])
         return child
 
     def crossover_generation(self, population):
@@ -203,40 +210,64 @@ class GeneticAlgorithm:
 
     def mutate(self, individual):
         """Mutate an individual by randomly changing its genes."""
-        mutated = []
-        for gene in individual:
+        mutated_individual = []
+        mutated = False
+        for gene in individual[0]:
             if random.random() < self.mutation_rate:
-
-                mutated.append(
+                mutated = True
+                mutated_individual.append(
                     {
                         "process": random.choice(self.genes),
                         "amount": gene["amount"],
                     }
                 )
             else:
-                mutated.append(gene)
+                mutated_individual.append(gene)
+        if mutated:
+            fitness = self.fitness_function(mutated_individual)
+            return mutated_individual, fitness
+        else:
+            return individual
 
-        return mutated
+    def one_generation(self):
+        self.sort_population()
+
+        self.fitnesses.append(self.population[0][1])
+
+        parent_population = self.parent_selection()
+        elite_population = self.elite_selection()
+        crossover_population = self.crossover_generation(parent_population)
+        self.population = crossover_population + elite_population
 
     def run(self):
         """Run the genetic algorithm."""
-        self.population = self.init_population(self.population_size)
-        fitnesses = []
+        self.population = [
+            (individual, self.fitness_function(individual))
+            for individual in self.init_population(self.population_size)
+        ]
+        self.fitnesses = []
 
-        for _ in ft_progress(range(self.generations)):
-            self.sort_population()
-
-            fitnesses.append(self.fitness_function(self.population[0]))
-
-            parent_population = self.parent_selection()
-            elite_population = self.elite_selection()
-            crossover_population = self.crossover_generation(parent_population)
-            self.population = crossover_population + elite_population
-
-            # cleanup population
-        best = max(self.population, key=lambda x: self.fitness_function(x))
-        fitnesses.append(self.fitness_function(best))
+        if self.time_limit:
+            start = time.time()
+            end = start + self.time_limit
+            generations = 0
+            message = ""
+            width = os.get_terminal_size()[0]
+            while time.time() < end:
+                if generations >= 1:
+                    moveup = "\033[A"
+                    print(moveup * int(len(message) / width + 1))
+                message = f"ETA {end - time.time():2.0f}s : Generation {generations}"
+                print(message, end="\r")
+                generations += 1
+                self.one_generation()
+            print(f"Time limit reached after {generations} generations")
+        else:
+            for _ in ft_progress(range(self.generations)):
+                self.one_generation()
+        best = max(self.population, key=lambda x: x[1])
+        self.fitnesses.append(best[1])
         return (
-            best,
-            fitnesses,
+            best[0],
+            self.fitnesses,
         )  # Return the best individual

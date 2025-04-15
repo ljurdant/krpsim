@@ -178,7 +178,7 @@ def get_score(
             stock[produced_resource] = (
                 stock.get(produced_resource, 0) + amount_produced * real_amount
             )
-        total_time += real_amount * processes[process_name]["time"]
+        total_time += processes[process_name]["time"]
 
         # print(process_name, stock)
 
@@ -192,10 +192,10 @@ def get_score(
     # resource_diff = resources_count - initial_resources_count
     # print(resources_count)
 
-    if "time" in optimize:
-        return resources_count / total_time if total_time > 0 else 0
-    else:
-        return resources_count  # + valid_count / len(individual)
+    # if "time" in optimize:
+    return resources_count / total_time if total_time > 0 else 0
+    # else:
+    # return resources_count  # + valid_count / len(individual)
     # I need to add valid_count to the score or something to reward good ressources collected
 
 
@@ -298,16 +298,13 @@ if __name__ == "__main__":
     stock, processes, optimize = parse(config_file)
 
     _min = 1
-    _max = 100
-    # for opt in optimize:
-    #     tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-    #     _min = _min + tmp_min
-    #     _max = _max + tmp_max
-
-    # _max = min(_max, 1000)
-
-    print("Min gene length:", _min)
-    print("Max gene length:", _max)
+    _max = 2
+    for opt in optimize:
+        tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
+        _max = _max + tmp_max
+    _min = 1
+    _max = _max
+    _max = min(_max, 50000)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -326,7 +323,7 @@ if __name__ == "__main__":
         #     population.append(individual)
 
         for _ in range(rand_pop_size):
-            individual = generate_random_individual(processes, 10000, _min, _max)
+            individual = generate_random_individual(processes, _max, _min, _max // 10)
             population.append(individual)
 
         return population
@@ -336,13 +333,18 @@ if __name__ == "__main__":
         crossover_rate=0.7,
         elite_rate=0.01,
         selection_rate=0.7,
-        mutation_rate=0.02,
+        mutation_rate=0.01,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
         generations=1000,
+        time_limit=30,
         parent_selection_type="random",
         crossover_point="single",
+        min_series_length=_min,
+        selection_pressure=8,
+        tournament_probability=0.9,
+        # max_series_length=_max // 10,
     )
 
     best, fitnesses = ga.run()
@@ -362,14 +364,17 @@ if __name__ == "__main__":
     current_time = now.strftime("%Y%m%d_%H:%M:%S")
     print("Time:", current_time)
 
-    json.dump(
-        valid_best,
-        open(
-            f"../results/{config_file.split('/')[-1]}_{fitness*100:.2f}_{current_time}.json",
-            "w",
-        ),
-        indent=4,
-    )
+    print("Save results? (y/n)")
+    save = input()
+    if save == "y":
+        json.dump(
+            valid_best,
+            open(
+                f"../results/{config_file.split('/')[-1]}_{fitness*100:.2f}_{current_time}.json",
+                "w",
+            ),
+            indent=4,
+        )
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")
