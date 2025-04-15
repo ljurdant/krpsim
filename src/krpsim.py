@@ -16,6 +16,19 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 
 
+def final_format(individual: List[dict[str, int]], processes) -> List[str]:
+    """
+    Convert the individual to a final format.
+    """
+    final_individual = []
+    current_cycle = 0
+    for process in individual:
+        for _ in range(process["amount"]):
+            final_individual.append(f"{current_cycle}:{process['process']}")
+        current_cycle += processes[process["process"]]["time"]
+    return final_individual
+
+
 def can_run_task(stock: dict[str, int], needs: dict[str, int]) -> bool:
     """
     Check if a task can be run with the current stock.
@@ -365,15 +378,15 @@ if __name__ == "__main__":
 
     print("Save results? (y/n)")
     save = input()
+    to_save = final_format(valid_best, processes)
+
     if save == "y":
-        json.dump(
-            valid_best,
-            open(
-                f"../results/{config_file.split('/')[-1]}_{fitness*100:.2f}_{current_time}.json",
-                "w",
-            ),
-            indent=4,
-        )
+        with open(
+            f"../results/{config_file.split('/')[-1]}_{fitness*100:.2f}_{current_time}.json",
+            "w",
+        ) as f:
+            for to_save_line in to_save:
+                f.write(f"{to_save_line}\n")
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")
