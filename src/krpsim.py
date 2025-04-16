@@ -16,16 +16,73 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 
 
-def final_format(individual: List[dict[str, int]], processes) -> List[str]:
+def final_format(individual: List[dict[str, int]], processes, stock) -> List[str]:
     """
     Convert the individual to a final format.
     """
     final_individual = []
     current_cycle = 0
-    for process in individual:
-        for _ in range(process["amount"]):
-            final_individual.append(f"{current_cycle}:{process['process']}")
-        current_cycle += processes[process["process"]]["time"]
+    i = 0
+    while i < len(individual):
+        for _ in range(individual[i]["amount"]):
+            final_individual.append(f"{current_cycle}:{individual[i]['process']}")
+        resource_diffs = []
+        resoource_diff = do_process(individual[i]["process"], processes, stock)
+
+        for consumed_resource, amount_consumed in resoource_diff["consumed"].items():
+            stock[consumed_resource] = (
+                stock.get(consumed_resource, 0)
+                - amount_consumed * individual[i]["amount"]
+            )
+        for produced_resource, amount_produced in resoource_diff["produced"].items():
+            resoource_diff["produced"][produced_resource] *= individual[i]["amount"]
+        resource_diffs.append(resoource_diff)
+
+        can_run = True
+        max_time = processes[individual[i]["process"]]["time"]
+        while i + 1 < len(individual) and can_run:
+            resoource_diff = do_process(individual[i + 1]["process"], processes, stock)
+            can_run = True
+
+            if len(resoource_diff["consumed"]) == 0:
+                i += 1
+                break
+            for resource, amount in resoource_diff["consumed"].items():
+                if (stock.get(resource, 0) - amount * individual[i + 1]["amount"]) < 0:
+                    can_run = False
+            if can_run:
+                for consumed_resource, amount_consumed in resoource_diff[
+                    "consumed"
+                ].items():
+                    stock[consumed_resource] = (
+                        stock.get(consumed_resource, 0)
+                        - amount_consumed * individual[i + 1]["amount"]
+                    )
+                for produced_resource, amount_produced in resoource_diff[
+                    "produced"
+                ].items():
+                    resoource_diff["produced"][produced_resource] *= individual[i + 1][
+                        "amount"
+                    ]
+                resource_diffs.append(resoource_diff)
+                if processes[individual[i + 1]["process"]]["time"] > max_time:
+                    max_time = processes[individual[i + 1]["process"]]["time"]
+                for _ in range(individual[i + 1]["amount"]):
+                    final_individual.append(
+                        f"{current_cycle}:{individual[i + 1]['process']}"
+                    )
+                i += 1
+            else:
+                i += 1
+                break
+        current_cycle += max_time
+        for resource_diff in resource_diffs:
+            for produced_resource, amount_produced in resource_diff["produced"].items():
+                stock[produced_resource] = (
+                    stock.get(produced_resource, 0) + amount_produced
+                )
+        if i + 1 == len(individual) and can_run == True:
+            i += 1
     return final_individual
 
 
@@ -241,7 +298,7 @@ def trim_invalid(
             stock[produced_resource] = (
                 stock.get(produced_resource, 0) + amount_produced * real_amount
             )
-        total_time += real_amount * processes[process_name]["time"]
+        total_time += processes[process_name]["time"]
         if real_amount > 0:
             valid_individual.append(
                 {
@@ -344,16 +401,19 @@ if __name__ == "__main__":
         crossover_rate=0.7,
         elite_rate=0.01,
         selection_rate=0.7,
-        mutation_rate=0.01,
+        mutation_rate=0.005,
         genes=list(processes.keys()),
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
         time_limit=max_execution_time,
-        parent_selection_type="random",
-        crossover_point="single",
-        hyper_mutation_rate=0.03,
+        parent_selection_type="trounament",
+        selection_pressure=3,
+        tournament_probability=0.1,
+        crossover_point="uniform",
+        hyper_mutation_rate=0.001,
         hyper_change_frequency=3,
         hyper_crossover_rate=0.9,
+        hyper_numb_generation=5,
     )
 
     best, fitnesses = ga.run()
@@ -361,21 +421,21 @@ if __name__ == "__main__":
     fitness = fitness_function(best)
     print("Best fitness:", fitness)
 
-    # print("Best individual:", best, len(best))
     valid_best = trim_invalid(best, processes, stock.copy())
     print(
         "Stock after best individual:",
         get_stock_after_individual(valid_best, processes, stock.copy()),
     )
+    print("Best individual:", valid_best)
 
     now = datetime.now()
 
     current_time = now.strftime("%Y%m%d_%H:%M:%S")
     print("Time:", current_time)
 
+    to_save = final_format(valid_best, processes, stock)
     print("Save results? (y/n)")
     save = input()
-    to_save = final_format(valid_best, processes)
 
     if save == "y":
         with open(

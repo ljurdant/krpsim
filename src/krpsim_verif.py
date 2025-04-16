@@ -159,8 +159,12 @@ def main():
             # Gather just the task names in this group
             task_names = [task_name for _, task_name in tasks_in_group]
 
+            new_duration, can_run = can_run_tasks_in_parallel(
+                stock, processes, task_names
+            )
+
             # Check if we have enough resources to run them in parallel
-            if not can_run_tasks_in_parallel(stock, processes, task_names):
+            if not can_run:
                 print(
                     f"Error: Not enough resources to run tasks {task_names} in parallel at cycle {cycle}."
                 )
@@ -203,6 +207,8 @@ def main():
                 # to cycle + the max duration among them.
                 max_dur = run_tasks_in_parallel(stock, processes, task_names)
                 current_real_cycle = cycle + beginning_cycle + max_dur
+            if current_real_cycle == beginning_cycle:
+                break
             beginning_cycle = current_real_cycle
 
     # 6) End: print final stock and final real cycle

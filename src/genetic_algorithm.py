@@ -25,6 +25,7 @@ class GeneticAlgorithm:
         hyper_mutation_rate=0.01,
         hyper_crossover_rate=0.7,
         hyper_change_frequency=100,
+        hyper_numb_generation=3,
     ):
         self.population_size = population_size
         self.population = []
@@ -43,9 +44,11 @@ class GeneticAlgorithm:
         self.time_limit = time_limit
         self.best_individual = None
         self.stagnation_count = 0
+        self.hyper_mutation_count = 0
         self.hyper_mutation_rate = hyper_mutation_rate
         self.hyper_change_frequency = hyper_change_frequency
         self.hyper_crossover_rate = hyper_crossover_rate
+        self.hyper_numb_generation = hyper_numb_generation
 
     def sort_population(self):
         self.population.sort(key=lambda x: x[1], reverse=True)
@@ -253,6 +256,11 @@ class GeneticAlgorithm:
         ):
             self.stagnation_count += 1
         else:
+            self.stagnation_count = 0
+        if self.stagnation_count >= self.hyper_change_frequency:
+            self.hyper_mutation_count += 1
+        if self.hyper_mutation_count >= self.hyper_numb_generation:
+            self.hyper_mutation_count = 0
             self.stagnation_count = 0
         self.best_individual = self.population[0]
         crossover_population = self.crossover_generation(parent_population)
