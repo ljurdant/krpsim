@@ -25,6 +25,8 @@ class GeneticAlgorithm:
         hyper_mutation_rate=0.01,
         hyper_crossover_rate=0.7,
         hyper_change_frequency=100,
+        max_gene_length=1,
+        min_gene_length=1,
     ):
         self.population_size = population_size
         self.population = []
@@ -46,6 +48,8 @@ class GeneticAlgorithm:
         self.hyper_mutation_rate = hyper_mutation_rate
         self.hyper_change_frequency = hyper_change_frequency
         self.hyper_crossover_rate = hyper_crossover_rate
+        self.max_gene_length = max_gene_length
+        self.min_gene_length = min_gene_length
 
     def sort_population(self):
         self.population.sort(key=lambda x: x[1], reverse=True)
@@ -62,13 +66,21 @@ class GeneticAlgorithm:
         return self.population[:elite_count]
 
     def single_point_crossover(self, individual1, individual2):
-        dna_length = sum(gene["amount"] for gene in individual1)
-        crossover_point = random.randint(0, dna_length - 1)
+        dna_length1 = sum(gene["amount"] for gene in individual1)
+        dna_length2 = sum(gene["amount"] for gene in individual2)
+        # crossover_point = random.randint(0, dna_length - 1)
+        crossover_point = random.randint(
+            0,
+            random.randint(
+                min(dna_length1 - 1, dna_length2 - 1),
+                max(dna_length1 - 1, dna_length2 - 1),
+            ),
+        )
         child = []
 
         total_length = 0
         i = 0
-        while total_length < crossover_point:
+        while total_length < crossover_point and i < len(individual1):
             if total_length + individual1[i]["amount"] > crossover_point:
                 amount1 = crossover_point - total_length
                 if len(child) and individual1[i]["process"] == child[-1]["process"]:
@@ -96,7 +108,7 @@ class GeneticAlgorithm:
 
         total_length = 0
         i = 0
-        while total_length < crossover_point:
+        while total_length < crossover_point and i < len(individual2):
             if total_length + individual2[i]["amount"] > crossover_point:
                 amount2 = total_length + individual2[i]["amount"] - crossover_point
                 if len(child) and individual2[i]["process"] == child[-1]["process"]:
@@ -227,17 +239,27 @@ class GeneticAlgorithm:
         if self.stagnation_count >= self.hyper_change_frequency:
             mutation_rate = self.hyper_mutation_rate
         for gene in individual[0]:
+            mutated_individual.append(
+                {
+                    "process": gene["process"],
+                    "amount": gene["amount"],
+                    "parallel": gene["parallel"],
+                }
+            )
             if random.random() < mutation_rate:
                 mutated = True
-                mutated_individual.append(
-                    {
-                        "process": random.choice(self.genes),
-                        "amount": gene["amount"],
-                        "parallel": gene["parallel"],
-                    }
+                mutated_individual[-1]["process"] = random.choice(self.genes)
+
+            if random.random() < mutation_rate:
+                mutated = True
+                mutated_individual[-1]["amount"] = random.randint(
+                    self.min_gene_length, self.max_gene_length
                 )
-            else:
-                mutated_individual.append(gene)
+            if random.random() < mutation_rate:
+                mutated = True
+                mutated_individual[-1]["parallel"] = not mutated_individual[-1][
+                    "parallel"
+                ]
 
         if mutated:
             fitness = self.fitness_function(mutated_individual)
@@ -248,18 +270,20 @@ class GeneticAlgorithm:
     def one_generation(self):
         self.sort_population()
 
-        self.fitnesses.append(self.population[0][1])
-
-        parent_population = self.parent_selection()
-        elite_population = self.elite_selection()
         if (
             self.best_individual is not None
-            and self.population[0] == self.best_individual
+            and self.population[0][1] == self.best_individual[1]
         ):
             self.stagnation_count += 1
         else:
             self.stagnation_count = 0
+
+        parent_population = self.parent_selection()
+        elite_population = self.elite_selection()
+
         self.best_individual = self.population[0]
+        self.fitnesses.append(self.best_individual[1])
+
         crossover_population = self.crossover_generation(parent_population)
         self.population = crossover_population + elite_population
 
@@ -292,6 +316,7 @@ class GeneticAlgorithm:
             for _ in ft_progress(range(self.generations)):
                 self.one_generation()
         best = max(self.population, key=lambda x: x[1])
+
         self.fitnesses.append(best[1])
         return (
             best[0],

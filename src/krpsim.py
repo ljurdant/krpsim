@@ -26,6 +26,7 @@ def final_format(individual: List[dict[str, int]], processes) -> List[str]:
     for process in individual:
         if not process["parallel"]:
             current_cycle += time
+            time = 0
         time = max(time, processes[process["process"]]["time"])
         for _ in range(process["amount"]):
             final_individual.append(f"{current_cycle}:{process['process']}")
@@ -141,27 +142,22 @@ def get_resource_hierarchy(
     )
 
     hierarchy_dict = {}
-    for opt in [opt for opt in optimize if opt != "time"]:
-        hierarchy_dict[opt] = 1
-    max_loop = len(resources)
-    while hierarchy_dict.keys() != resources and max_loop > 0:
-        for process in [
-            process
-            for process in processes.values()
-            if any(key in hierarchy_dict.keys() for key in process["result"].keys())
-        ]:
-            for need in process["need"].keys():
-                for result in [
-                    result
-                    for result in process["result"].keys()
-                    if result in hierarchy_dict.keys()
-                ]:
-                    need_value = hierarchy_dict[result] / process["need"][need]
-                    if hierarchy_dict.get(need) is None:
-                        hierarchy_dict[need] = need_value
-                    else:
-                        hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
-        max_loop -= 1
+
+    for process in processes.values():
+        for need in process["need"].keys():
+            for result in process["result"].keys():
+                if result in optimize:
+                    hierarchy_dict[need] = (
+                        process["result"][result] / process["need"][need]
+                    )
+    max_hierarchy = max(hierarchy_dict.values())
+    for key in hierarchy_dict.keys():
+        hierarchy_dict[key] = hierarchy_dict[key] / max_hierarchy
+
+    if len(resources) != len(hierarchy_dict):
+        test = get_resource_hierarchy(processes, hierarchy_dict.keys())
+        print("test=", test)
+
     for opt in optimize:
         hierarchy_dict[opt] = 2
     return hierarchy_dict
@@ -336,15 +332,16 @@ if __name__ == "__main__":
         sys.exit(1)
     stock, processes, optimize = parse(config_file)
 
-    _min = 1
-    _max = 2
+    min_gene_length = 1
+    max_chromosome_length = 1
     for opt in optimize:
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-        _max = _max + tmp_max
-    _min = 1
-    _max = min(_max, 50000)
+        max_chromosome_length = max_chromosome_length + tmp_max
+    max_chromosome_length = min(max_chromosome_length, 50000)
+    max_gene_length = max(max_chromosome_length // 100, 1)
 
     hierarchy = get_resource_hierarchy(processes, optimize)
+    print("Hierarchy:", hierarchy)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -358,14 +355,14 @@ if __name__ == "__main__":
 
         for _ in range(rand_pop_size):
             individual = generate_random_individual(
-                processes, _max, _min, max(_max // 100, 1)
+                processes, max_chromosome_length, min_gene_length, max_gene_length
             )
             population.append(individual)
 
         return population
 
     ga = GeneticAlgorithm(
-        population_size=500,
+        population_size=300,
         crossover_rate=0.7,
         elite_rate=0.01,
         selection_rate=0.7,
@@ -379,27 +376,20 @@ if __name__ == "__main__":
         hyper_mutation_rate=0.03,
         hyper_change_frequency=3,
         hyper_crossover_rate=0.9,
+        max_gene_length=max_gene_length,
+        min_gene_length=min_gene_length,
     )
 
     best, fitnesses = ga.run()
 
-    fitness = fitness_function(best)
+    fitness = ga.fitness_function(best)
     print("Best fitness:", fitness)
 
-    # print("Best individual:", best, len(best))
-
-    # print("Best individual:", best, len(best))
-
     valid_best = trim_invalid(best, processes, stock.copy())
-    # print(
-    #     "Stock after best individual:",
-    #     get_stock_after_individual(valid_best, processes, stock.copy()),
-    # )
 
     now = datetime.now()
 
     current_time = now.strftime("%Y%m%d_%H:%M:%S")
-    print("Time:", current_time)
 
     print("Save results? (y/n)")
     save = input()
