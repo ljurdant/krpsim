@@ -2,6 +2,7 @@
 import sys
 import re
 from collections import defaultdict
+import argparse
 
 from parser import parse
 
@@ -15,6 +16,9 @@ def can_run_tasks_in_parallel(stock, processes, task_names):
     Alternatively, if you want to allow partial concurrency or some tasks
     to run first, you would need a more complex scheduling check.
     """
+
+    # Also track each task's time for computing max duration
+    max_duration = 0
     # Sum up total needs across all tasks
     total_needs = defaultdict(int)
     for name in task_names:
@@ -22,11 +26,15 @@ def can_run_tasks_in_parallel(stock, processes, task_names):
         for rsrc, needed_qty in proc["need"].items():
             total_needs[rsrc] += needed_qty
 
+        # Track max
+        if proc["time"] > max_duration:
+            max_duration = proc["time"]
+
     # Now check if stock can handle that
     for rsrc, needed_qty in total_needs.items():
         if stock.get(rsrc, 0) < needed_qty:
-            return False
-    return True
+            return max_duration, False
+    return max_duration, True
 
 
 def run_tasks_in_parallel(stock, processes, task_names):
@@ -82,16 +90,21 @@ def main():
     If we see a subsequent group with a <cycle> smaller than our 'real cycle',
     we print an error and stop.
     """
-    if len(sys.argv) != 3:
-        print("Usage: python krpsim_verif.py <config_file> <tasks_file>")
-        sys.exit(1)
-
-    config_file = sys.argv[1]
-    tasks_file = sys.argv[2]
+    parser = argparse.ArgumentParser(description="krpsim verification script")
+    parser.add_argument("config_file", help="Path to the krpsim config file")
+    parser.add_argument("tasks_file", help="Path to the JSON file describing tasks")
+    parser.add_argument(
+        "-c",
+        "--cycles",
+        type=int,
+        default=None,
+        help="Number of cycles to run until stopping. If omitted, we run through the file exactly once.",
+    )
+    args = parser.parse_args()
 
     # 1) Parse the KRPSim config
     try:
-        stock, processes, optimize = parse(config_file)
+        stock, processes, optimize = parse(args.config_file)
     except ValueError as e:
         print(f"Error parsing file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -99,7 +112,7 @@ def main():
     # 2) Read the tasks from the <tasks_file>, line by line
     line_regex = re.compile(r"^(\d+)\s*:\s*(.+)$")
     tasks = []
-    with open(tasks_file, "r") as f:
+    with open(args.tasks_file, "r") as f:
         for raw_line in f:
             line = raw_line.strip()
             if not line or line.startswith("#"):
@@ -127,32 +140,67 @@ def main():
     from itertools import groupby
 
     current_real_cycle = 0
-
+    cycle_limit = args.cycles
+    grouped = groupby(tasks, key=lambda x: x[0])
     # 5) Process each group in ascending cycle order
-    for cycle, tasks_in_group in groupby(tasks, key=lambda x: x[0]):
+    if not cycle_limit:
+        for cycle, tasks_in_group in grouped:
+            # If the user tries to schedule tasks at a cycle < current_real_cycle, that's invalid
+            if cycle < current_real_cycle:
+                print(
+                    f"Error: Task(s) scheduled at cycle {cycle}, but the current real time is {current_real_cycle}."
+                )
+                print("Cannot go back in time. Verification failed.")
+                sys.exit(1)
 
-        # If the user tries to schedule tasks at a cycle < current_real_cycle, that's invalid
-        if cycle < current_real_cycle:
-            print(
-                f"Error: Task(s) scheduled at cycle {cycle}, but the current real time is {current_real_cycle}."
-            )
-            print("Cannot go back in time. Verification failed.")
-            sys.exit(1)
+            # Gather just the task names in this group
+            task_names = [task_name for _, task_name in tasks_in_group]
 
-        # Gather just the task names in this group
-        task_names = [task_name for _, task_name in tasks_in_group]
-        # Check if we have enough resources to run them in parallel
+            # Check if we have enough resources to run them in parallel
+            if not can_run_tasks_in_parallel(stock, processes, task_names):
+                print(
+                    f"Error: Not enough resources to run tasks {task_names} in parallel at cycle {cycle}."
+                )
+                continue
 
-        if not can_run_tasks_in_parallel(stock, processes, task_names):
-            print(
-                f"Error: Not enough resources to run tasks {set(task_names)} in parallel at cycle {cycle}."
-            )
-            continue
+            # If we can run them, we do so, and move the real cycle forward
+            # to cycle + the max duration among them.
+            max_dur = run_tasks_in_parallel(stock, processes, task_names)
+            current_real_cycle = cycle + max_dur
+    else:
+        beginning_cycle = 0
+        new_duration = 0
+        while current_real_cycle + new_duration < cycle_limit:
+            for cycle, tasks_in_group in grouped:
+                # If the user tries to schedule tasks at a cycle < current_real_cycle, that's invalid
+                if cycle + beginning_cycle < current_real_cycle:
+                    print(
+                        f"Error: Task(s) scheduled at cycle {cycle + beginning_cycle}, but the current real time is {current_real_cycle}."
+                    )
+                    print("Cannot go back in time. Verification failed.")
+                    sys.exit(1)
 
-        # If we can run them, we do so, and move the real cycle forward
-        # to cycle + the max duration among them.
-        max_dur = run_tasks_in_parallel(stock, processes, task_names)
-        current_real_cycle = cycle + max_dur
+                # Gather just the task names in this group
+                task_names = [task_name for _, task_name in tasks_in_group]
+
+                # Check if we have enough resources to run them in parallel
+                new_duration, can_run = can_run_tasks_in_parallel(
+                    stock, processes, task_names
+                )
+                # If we reached the limit, we stop
+                if cycle + beginning_cycle + new_duration > cycle_limit:
+                    break
+                if not can_run:
+                    print(
+                        f"Error: Not enough resources to run tasks {task_names} in parallel at cycle {cycle + beginning_cycle}."
+                    )
+                    continue
+
+                # If we can run them, we do so, and move the real cycle forward
+                # to cycle + the max duration among them.
+                max_dur = run_tasks_in_parallel(stock, processes, task_names)
+                current_real_cycle = cycle + beginning_cycle + max_dur
+            beginning_cycle = current_real_cycle
 
     # 6) End: print final stock and final real cycle
     print("\n===== VERIFICATION SUCCESS =====")
