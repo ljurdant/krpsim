@@ -46,6 +46,7 @@ def final_format(individual: List[dict[str, int]], processes, stock) -> List[str
 
             if len(resoource_diff["consumed"]) == 0:
                 i += 1
+                can_run = False
                 break
             for resource, amount in resoource_diff["consumed"].items():
                 if (stock.get(resource, 0) - amount * individual[i + 1]["amount"]) < 0:
@@ -211,8 +212,13 @@ def get_resource_hierarchy(
                     else:
                         hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
 
-    for opt in optimize:
-        hierarchy_dict[opt] = 2
+    for opt in [opt for opt in optimize if opt != "time"]:
+        if "time" in optimize:
+            for process in processes.values():
+                if opt in process["result"].keys():
+                    hierarchy_dict[opt] = 2 * process["time"]
+        else:
+            hierarchy_dict[opt] = 2
     return hierarchy_dict
 
 
@@ -397,7 +403,7 @@ if __name__ == "__main__":
         return population
 
     ga = GeneticAlgorithm(
-        population_size=500,
+        population_size=200,
         crossover_rate=0.7,
         elite_rate=0.01,
         selection_rate=0.7,
@@ -407,13 +413,14 @@ if __name__ == "__main__":
         init_population=init_population_with_sgs,
         time_limit=max_execution_time,
         parent_selection_type="trounament",
-        selection_pressure=3,
-        tournament_probability=0.1,
+        selection_pressure=2,
+        tournament_probability=0.2,
         crossover_point="uniform",
-        hyper_mutation_rate=0.001,
+        hyper_mutation_rate=0.0005,
         hyper_change_frequency=3,
-        hyper_crossover_rate=0.9,
-        hyper_numb_generation=5,
+        hyper_tournament_probability=0.9,
+        hyper_selection_pressure=3,
+        hyper_numb_generation=3,
     )
 
     best, fitnesses = ga.run()

@@ -23,7 +23,8 @@ class GeneticAlgorithm:
         time_limit=None,
         init_population=None,
         hyper_mutation_rate=0.01,
-        hyper_crossover_rate=0.7,
+        hyper_tournament_probability=0.7,
+        hyper_selection_pressure=2,
         hyper_change_frequency=100,
         hyper_numb_generation=3,
     ):
@@ -47,7 +48,8 @@ class GeneticAlgorithm:
         self.hyper_mutation_count = 0
         self.hyper_mutation_rate = hyper_mutation_rate
         self.hyper_change_frequency = hyper_change_frequency
-        self.hyper_crossover_rate = hyper_crossover_rate
+        self.hyper_tournament_probability = hyper_tournament_probability
+        self.hyper_selection_pressure = hyper_selection_pressure
         self.hyper_numb_generation = hyper_numb_generation
 
     def sort_population(self):
@@ -172,10 +174,17 @@ class GeneticAlgorithm:
         Perform a tournament of size k on the population.
         Return the best individual (highest fitness) among k random picks.
         """
-
-        p = self.tournament_probability
+        tournament_probability = self.tournament_probability
+        selection_pressure = self.selection_pressure
+        if self.stagnation_count >= self.hyper_change_frequency:
+            selection_pressure = random.randint(
+                self.selection_pressure, self.hyper_selection_pressure
+            )
+        if self.stagnation_count >= self.hyper_change_frequency:
+            tournament_probability = self.hyper_tournament_probability
+        p = tournament_probability
         # Randomly choose k individuals
-        tournament_contestants = random.sample(population, self.selection_pressure)
+        tournament_contestants = random.sample(population, selection_pressure)
         tournament_contestants.sort(key=lambda x: x[1], reverse=True)
         weights = [p * ((1 - p) ** i) for i in range(len(tournament_contestants))]
         return random.choices(population=tournament_contestants, k=1, weights=weights)[
@@ -192,8 +201,6 @@ class GeneticAlgorithm:
         parent1 = self.get_crossover_parent(population)
         parent2 = self.get_crossover_parent(population)
         crossover_rate = self.crossover_rate
-        if self.stagnation_count >= self.hyper_change_frequency:
-            crossover_rate = self.hyper_crossover_rate
 
         if random.random() < crossover_rate:
             child_individual = self.crossover(parent1[0], parent2[0])
