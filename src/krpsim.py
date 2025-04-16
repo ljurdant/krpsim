@@ -143,27 +143,27 @@ def get_resource_hierarchy(
     hierarchy_dict = {}
     for opt in [opt for opt in optimize if opt != "time"]:
         hierarchy_dict[opt] = 1
-    # max_loop = len(resources)
-    # while hierarchy_dict.keys() != resources and max_loop > 0:
-    #     for process in [
-    #         process
-    #         for process in processes.values()
-    #         if any(key in hierarchy_dict.keys() for key in process["result"].keys())
-    #     ]:
-    #         for need in process["need"].keys():
-    #             for result in [
-    #                 result
-    #                 for result in process["result"].keys()
-    #                 if result in hierarchy_dict.keys()
-    #             ]:
-    #                 need_value = hierarchy_dict[result] / process["need"][need]
-    #                 if hierarchy_dict.get(need) is None:
-    #                     hierarchy_dict[need] = need_value
-    #                 else:
-    #                     hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
-    #     max_loop -= 1
-    # for opt in optimize:
-    #     hierarchy_dict[opt] = 2
+    max_loop = len(resources)
+    while hierarchy_dict.keys() != resources and max_loop > 0:
+        for process in [
+            process
+            for process in processes.values()
+            if any(key in hierarchy_dict.keys() for key in process["result"].keys())
+        ]:
+            for need in process["need"].keys():
+                for result in [
+                    result
+                    for result in process["result"].keys()
+                    if result in hierarchy_dict.keys()
+                ]:
+                    need_value = hierarchy_dict[result] / process["need"][need]
+                    if hierarchy_dict.get(need) is None:
+                        hierarchy_dict[need] = need_value
+                    else:
+                        hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
+        max_loop -= 1
+    for opt in optimize:
+        hierarchy_dict[opt] = 2
     return hierarchy_dict
 
 
@@ -295,25 +295,6 @@ def trim_invalid(
                 parallel = True
     valid_individual[0]["parallel"] = True
     return valid_individual
-
-
-# def get_stock_after_individual(
-#     individual: List[dict[str, int]], processes, stock: dict[str, int]
-# ) -> dict[str, int]:
-
-#     for process in individual:
-#         for i in range(process["amount"]):
-#             resource_diff = do_process(process["process"], processes, stock)
-#             for consumed_resource, amount_consumed in resource_diff["consumed"].items():
-#                 stock[consumed_resource] = (
-#                     stock.get(consumed_resource, 0) - amount_consumed
-#                 )
-#             for produced_resource, amount_produced in resource_diff["produced"].items():
-#                 stock[produced_resource] = (
-#                     stock.get(produced_resource, 0) + amount_produced
-#                 )
-
-#     return stock
 
 
 def get_min_max_gene_length(
