@@ -466,6 +466,8 @@ if __name__ == "__main__":
     save = input()
 
     if save == "y":
+        folder_path = "../results"  # any depth you like
+        os.makedirs(folder_path, exist_ok=True)
         filename = (
             f"../results/{config_file.split('/')[-1]}_{fitness:.2f}_{current_time}.json"
         )
@@ -479,11 +481,13 @@ if __name__ == "__main__":
         print("Run verification? (y/n)")
         verify = input()
         if verify == "y":
-            os.execve(
-                f"./krpsim_verif.py",
-                ["./krpsim_verif.py", config_file, filename],
-                {},
-            )
+            pid = os.fork()
+            if pid == 0:  # child
+                os.execve(
+                    f"./krpsim_verif.py",
+                    ["./krpsim_verif.py", config_file, filename],
+                    {},
+                )
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")
