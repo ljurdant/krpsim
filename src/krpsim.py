@@ -142,21 +142,26 @@ def get_resource_hierarchy(
     )
 
     hierarchy_dict = {}
+    for opt in [opt for opt in optimize if opt != "time"]:
+        hierarchy_dict[opt] = 1
 
-    for process in processes.values():
-        for need in process["need"].keys():
-            for result in process["result"].keys():
-                if result in optimize:
-                    hierarchy_dict[need] = (
-                        process["result"][result] / process["need"][need]
-                    )
-    max_hierarchy = max(hierarchy_dict.values())
-    for key in hierarchy_dict.keys():
-        hierarchy_dict[key] = hierarchy_dict[key] / max_hierarchy
-
-    if len(resources) != len(hierarchy_dict):
-        test = get_resource_hierarchy(processes, hierarchy_dict.keys())
-        print("test=", test)
+    while hierarchy_dict.keys() != resources:
+        for process in [
+            process
+            for process in processes.values()
+            if any(key in hierarchy_dict.keys() for key in process["result"].keys())
+        ]:
+            for need in process["need"].keys():
+                for result in [
+                    result
+                    for result in process["result"].keys()
+                    if result in hierarchy_dict.keys()
+                ]:
+                    need_value = hierarchy_dict[result] / process["need"][need]
+                    if hierarchy_dict.get(need) is None:
+                        hierarchy_dict[need] = need_value
+                    else:
+                        hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
 
     for opt in optimize:
         hierarchy_dict[opt] = 2
