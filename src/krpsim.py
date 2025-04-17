@@ -22,10 +22,15 @@ def final_format(individual: List[dict[str, int]], processes) -> List[str]:
     """
     final_individual = []
     current_cycle = 0
+    time = 0
     for process in individual:
+        if not process["parallel"]:
+            current_cycle += time
+            time = 0
+        time = max(time, processes[process["process"]]["time"])
         for _ in range(process["amount"]):
             final_individual.append(f"{current_cycle}:{process['process']}")
-        current_cycle += processes[process["process"]]["time"]
+
     return final_individual
 
 
@@ -115,11 +120,15 @@ def generate_random_individual(
         task_length = random.randint(min_length, max_length)
         task_length = min(task_length, length - total_length)
 
-        chromosome.append({"amount": task_length, "process": chosen_task})
+        chromosome.append(
+            {
+                "amount": task_length,
+                "process": chosen_task,
+                "parallel": bool(random.randint(0, 1)),
+            }
+        )
         total_length += task_length
-    if sum(gene["amount"] for gene in chromosome) != length:
-        print("chromosome", chromosome)
-        raise Exception("stop")
+
     return chromosome
 
 
@@ -173,31 +182,50 @@ def get_score(
     # init_resources_count = sum(stock.get(resource, 0) for resource in optimize)
 
     total_time = 0
-    for gene in individual:
-        process_name = gene["process"]
-        process_amount = gene["amount"]
+    i = 0
+    while i < len(individual):
+        parallel_tasks = [individual[i]]
+        i += 1
+        while i < len(individual) and individual[i]["parallel"]:
+            parallel_tasks.append(individual[i])
+            i += 1
+        time = 0
+        real_amounts = []
+        resource_diffs = []
+        for gene in parallel_tasks:
+            process_name = gene["process"]
+            process_amount = gene["amount"]
 
-        resource_diff = do_process(process_name, processes, stock)
+            resource_diff = do_process(process_name, processes, stock)
 
-        min_amount_possible = 0
-        for resource, amount in resource_diff["consumed"].items():
-            resource_possible = stock.get(resource, 0) // amount
-            if min_amount_possible == 0:
-                min_amount_possible = resource_possible
-            else:
-                min_amount_possible = min(min_amount_possible, resource_possible)
-        real_amount = min(process_amount, min_amount_possible)
+            min_amount_possible = 0
+            for resource, amount in resource_diff["consumed"].items():
+                resource_possible = stock.get(resource, 0) // amount
+                if min_amount_possible == 0:
+                    min_amount_possible = resource_possible
+                else:
+                    min_amount_possible = min(min_amount_possible, resource_possible)
+            real_amount = min(process_amount, min_amount_possible)
 
-        for consumed_resource, amount_consumed in resource_diff["consumed"].items():
-            stock[consumed_resource] = (
-                stock.get(consumed_resource, 0) - amount_consumed * real_amount
-            )
-        for produced_resource, amount_produced in resource_diff["produced"].items():
-            stock[produced_resource] = (
-                stock.get(produced_resource, 0) + amount_produced * real_amount
-            )
-        if real_amount > 0:
-            total_time += processes[process_name]["time"]
+            resource_diffs.append(resource_diff)
+            real_amounts.append(real_amount)
+
+            if real_amount > 0:
+                time = max(time, processes[process_name]["time"])
+
+            for consumed_resource, amount_consumed in resource_diff["consumed"].items():
+                stock[consumed_resource] = (
+                    stock.get(consumed_resource, 0) - amount_consumed * real_amount
+                )
+
+        for n in range(len(parallel_tasks)):
+            for produced_resource, amount_produced in resource_diffs[n][
+                "produced"
+            ].items():
+                stock[produced_resource] = (
+                    stock.get(produced_resource, 0) + amount_produced * real_amounts[n]
+                )
+        total_time += time
 
     # resources_count = sum(stock.get(resource, 0) for resource in optimize)
     resources_count = sum(
@@ -216,60 +244,58 @@ def trim_invalid(
     individual: List[dict[str, int]], processes, stock: dict[str, int]
 ) -> List[dict[str, int]]:
     valid_individual = []
-    total_time = 0
+    i = 0
+    while i < len(individual):
+        parallel_tasks = [individual[i]]
+        i += 1
+        while i < len(individual) and individual[i]["parallel"]:
+            parallel_tasks.append(individual[i])
+            i += 1
 
-    for gene in individual:
-        process_name = gene["process"]
-        process_amount = gene["amount"]
+        real_amounts = []
+        resource_diffs = []
+        for gene in parallel_tasks:
+            process_name = gene["process"]
+            process_amount = gene["amount"]
 
-        resource_diff = do_process(process_name, processes, stock)
+            resource_diff = do_process(process_name, processes, stock)
 
-        min_amount_possible = 0
-        for resource, amount in resource_diff["consumed"].items():
-            resource_possible = stock.get(resource, 0) // amount
-            if min_amount_possible == 0:
-                min_amount_possible = resource_possible
-            else:
-                min_amount_possible = min(min_amount_possible, resource_possible)
-        real_amount = min(process_amount, min_amount_possible)
+            max_amount_possible = 0
+            for resource, amount in resource_diff["consumed"].items():
+                resource_possible = stock.get(resource, 0) // amount
+                if max_amount_possible == 0:
+                    max_amount_possible = resource_possible
+                else:
+                    max_amount_possible = min(max_amount_possible, resource_possible)
 
-        for consumed_resource, amount_consumed in resource_diff["consumed"].items():
-            stock[consumed_resource] = (
-                stock.get(consumed_resource, 0) - amount_consumed * real_amount
-            )
-        for produced_resource, amount_produced in resource_diff["produced"].items():
-            stock[produced_resource] = (
-                stock.get(produced_resource, 0) + amount_produced * real_amount
-            )
-        total_time += real_amount * processes[process_name]["time"]
-        if real_amount > 0:
-            valid_individual.append(
-                {
-                    "process": process_name,
-                    "amount": real_amount,
-                }
-            )
+            real_amount = min(process_amount, max_amount_possible)
+            resource_diffs.append(resource_diff)
+            real_amounts.append(real_amount)
 
-    return valid_individual
-
-
-def get_stock_after_individual(
-    individual: List[dict[str, int]], processes, stock: dict[str, int]
-) -> dict[str, int]:
-
-    for process in individual:
-        for i in range(process["amount"]):
-            resource_diff = do_process(process["process"], processes, stock)
             for consumed_resource, amount_consumed in resource_diff["consumed"].items():
                 stock[consumed_resource] = (
-                    stock.get(consumed_resource, 0) - amount_consumed
+                    stock.get(consumed_resource, 0) - amount_consumed * real_amount
                 )
-            for produced_resource, amount_produced in resource_diff["produced"].items():
+        parallel = False
+        for n in range(len(parallel_tasks)):
+            for produced_resource, amount_produced in resource_diffs[n][
+                "produced"
+            ].items():
                 stock[produced_resource] = (
-                    stock.get(produced_resource, 0) + amount_produced
+                    stock.get(produced_resource, 0) + amount_produced * real_amounts[n]
                 )
+            if real_amounts[n] > 0:
 
-    return stock
+                valid_individual.append(
+                    {
+                        "amount": real_amounts[n],
+                        "process": parallel_tasks[n]["process"],
+                        "parallel": parallel,
+                    }
+                )
+                parallel = True
+    valid_individual[0]["parallel"] = True
+    return valid_individual
 
 
 def get_min_max_gene_length(
@@ -311,15 +337,16 @@ if __name__ == "__main__":
         sys.exit(1)
     stock, processes, optimize = parse(config_file)
 
-    _min = 1
-    _max = 2
+    min_gene_length = 1
+    max_chromosome_length = 1
     for opt in optimize:
         tmp_min, tmp_max = get_min_max_gene_length(0, 1, processes, opt, stock)
-        _max = _max + tmp_max
-    _min = 1
-    _max = min(_max, 50000)
+        max_chromosome_length = max_chromosome_length + tmp_max
+    max_chromosome_length = min(max_chromosome_length, 50000)
+    max_gene_length = max(max_chromosome_length // 100, 1)
 
     hierarchy = get_resource_hierarchy(processes, optimize)
+    print("Hierarchy:", hierarchy)
 
     def fitness_function(individual):
         stock_copy = stock.copy()
@@ -333,14 +360,14 @@ if __name__ == "__main__":
 
         for _ in range(rand_pop_size):
             individual = generate_random_individual(
-                processes, _max, _min, max(_max // 100, 1)
+                processes, max_chromosome_length, min_gene_length, max_gene_length
             )
             population.append(individual)
 
         return population
 
     ga = GeneticAlgorithm(
-        population_size=500,
+        population_size=300,
         crossover_rate=0.7,
         elite_rate=0.01,
         selection_rate=0.7,
@@ -354,27 +381,24 @@ if __name__ == "__main__":
         hyper_mutation_rate=0.03,
         hyper_change_frequency=3,
         hyper_crossover_rate=0.9,
+        max_gene_length=max_gene_length,
+        min_gene_length=min_gene_length,
     )
 
     best, fitnesses = ga.run()
 
-    fitness = fitness_function(best)
+    fitness = ga.fitness_function(best)
     print("Best fitness:", fitness)
 
-    # print("Best individual:", best, len(best))
     valid_best = trim_invalid(best, processes, stock.copy())
-    print(
-        "Stock after best individual:",
-        get_stock_after_individual(valid_best, processes, stock.copy()),
-    )
 
     now = datetime.now()
 
     current_time = now.strftime("%Y%m%d_%H:%M:%S")
-    print("Time:", current_time)
 
     print("Save results? (y/n)")
     save = input()
+
     to_save = final_format(valid_best, processes)
 
     if save == "y":
