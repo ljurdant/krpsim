@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
 from _types import Process
 from typing import List
 from genetic_algorithm import GeneticAlgorithm
@@ -161,9 +162,6 @@ def generate_random_individual(
     max_length=30,
 ) -> List[dict[str, int]]:
 
-    # task_names = list(processes.keys())  # Genes
-    # length = random.randint(min_length, max_length)
-    # chromosome = [random.choice(task_names) for _ in range(length)]
     chromosome = []
     total_length = 0
     while total_length < length:
@@ -273,14 +271,12 @@ def get_score(
     individual: tuple[List[dict[str, int]], tuple[float, dict[str, int]]],
     stock: dict[str, int],
     optimize: List[str],
-    hierarchy: dict[str, List[str]],
 ) -> float:
 
     init_resources_count = sum(stock.get(resource, 0) for resource in optimize)
 
     total_time, new_stock = individual[1]
 
-    # resources_count = sum(stock.get(resource, 0) for resource in optimize)
     resources_count = sum(new_stock.get(resource, 0) for resource in optimize)
 
     resource_diff = resources_count - init_resources_count
@@ -464,7 +460,7 @@ if __name__ == "__main__":
             del hierarchy[opt]
 
     def fitness_function(individual):
-        return get_score(individual, stock.copy(), optimize, hierarchy)
+        return get_score(individual, stock.copy(), optimize)
 
     def cmp_function(
         individual1: List[dict[str, int]], individual2: List[dict[str, int]]
@@ -533,19 +529,12 @@ if __name__ == "__main__":
     current_time = now.strftime("%Y%m%d_%H:%M:%S")
 
     to_save = final_format(valid_best, processes, stock)
-    # print(stock, optimize)
-    # print(
-    #     compare_scores(
-    #         ("1", (30, {"energy": 45})),
-    #         ("2", (30, {"cell": 2})),
-    #         stock,
-    #         optimize,
-    #         hierarchy,
-    #     )
-    # )
+
     print("Save results? (y/n)")
     save = input()
     if save == "y":
+        folder = Path("../results")
+        folder.mkdir(parents=True, exist_ok=True)
         filename = (
             f"../results/{config_file.split('/')[-1]}_{fitness:.2f}_{current_time}.json"
         )
@@ -559,11 +548,13 @@ if __name__ == "__main__":
         print("Run verification? (y/n)")
         verify = input()
         if verify == "y":
-            os.execve(
-                f"./krpsim_verif.py",
-                ["./krpsim_verif.py", config_file, filename],
-                {},
-            )
+            pid = os.fork()
+            if pid == 0:
+                os.execve(
+                    f"./krpsim_verif.py",
+                    ["./krpsim_verif.py", config_file, filename],
+                    {},
+                )
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")
