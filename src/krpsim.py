@@ -319,6 +319,10 @@ def compare_scores(
         optimize_diff1 = optimize_diff1 / total_time1 if total_time1 > 0 else 0
         optimize_diff2 = optimize_diff2 / total_time2 if total_time2 > 0 else 0
 
+        if optimize_diff1 == optimize_diff2:
+            optimize_diff1 *= total_time1
+            optimize_diff2 *= total_time2
+
     if optimize_diff1 != optimize_diff2:
         return optimize_diff1 - optimize_diff2
     else:
@@ -340,6 +344,9 @@ def compare_scores(
         if "time" in optimize:
             resource_diff1 = resource_diff1 / total_time1 if total_time1 > 0 else 0
             resource_diff2 = resource_diff2 / total_time2 if total_time2 > 0 else 0
+            if resource_diff1 == resource_diff2:
+                resource_diff1 *= total_time1
+                resource_diff2 *= total_time2
 
         return resource_diff1 - resource_diff2
 
@@ -456,8 +463,6 @@ if __name__ == "__main__":
         if opt in hierarchy:
             del hierarchy[opt]
 
-    print("Hierarchy:", hierarchy)
-
     def fitness_function(individual):
         return get_score(individual, stock.copy(), optimize, hierarchy)
 
@@ -501,13 +506,13 @@ if __name__ == "__main__":
         init_population=init_population_with_sgs,
         time_limit=max_execution_time,
         parent_selection_type="random",
-        selection_pressure=8,
+        selection_pressure=2,
         tournament_probability=0.7,
         crossover_point="single",
         hyper_mutation_rate=0.005,
         hyper_change_frequency=3,
         hyper_tournament_probability=0.5,
-        hyper_selection_pressure=2,
+        hyper_selection_pressure=8,
         hyper_numb_generation=3,
         max_gene_length=max_gene_length,
         min_gene_length=min_gene_length,
@@ -540,7 +545,6 @@ if __name__ == "__main__":
     # )
     print("Save results? (y/n)")
     save = input()
-    print(sum([process["amount"] for process in valid_best]))
     if save == "y":
         filename = (
             f"../results/{config_file.split('/')[-1]}_{fitness:.2f}_{current_time}.json"
