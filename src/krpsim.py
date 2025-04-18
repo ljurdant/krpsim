@@ -187,60 +187,39 @@ def generate_random_individual(
 
 
 def get_resource_hierarchy(
-    processes: dict[str, Process], optimize: List[str]
-) -> dict[str, List[str]]:
+    processes: dict[str, dict], optimize: dict[str, int], level=1, exclude={}
+) -> dict[str, float]:
+    hierarchy = {}
 
-    resources = set(
-        [key for process in processes.values() for key in process["need"].keys()]
-        + [key for process in processes.values() for key in process["result"].keys()]
-    )
+    for process in processes.values():
+        result_keys = set(process["result"].keys())
 
-    hierarchy_dict = {}
-    for opt in [opt for opt in optimize if opt != "time"]:
-        hierarchy_dict[opt] = 1
-
-    max_loop = len(resources)
-    while hierarchy_dict.keys() != resources and max_loop > 0:
-        for process in [
-            process
-            for process in processes.values()
-            if any(key in hierarchy_dict.keys() for key in process["result"].keys())
-        ]:
-            for need in process["need"].keys():
-                for result in [
-                    result
-                    for result in process["result"].keys()
-                    if result in hierarchy_dict.keys()
-                ]:
-                    need_value = hierarchy_dict[result] / process["need"][need]
-                    if hierarchy_dict.get(need) is None:
-                        hierarchy_dict[need] = need_value
-                    else:
-                        hierarchy_dict[need] = min(need_value, hierarchy_dict[need])
-        max_loop -= 1
-
-    for opt in [opt for opt in optimize if opt != "time"]:
-        if "time" in optimize:
-            for process in processes.values():
-                if opt in process["result"].keys():
-                    hierarchy_dict[opt] = 10 * process["time"]
-        else:
-            hierarchy_dict[opt] = 10
-    return hierarchy_dict
+        # If the process produces something already in the hierarchy, update its inputs
+        for result in result_keys:
+            if result in optimize:
+                for need in process["need"]:
+                    value = (
+                        process["result"][result]
+                        / process["need"][need]
+                        * optimize[result]
+                    )
+                    hierarchy[need] = max(hierarchy.get(need, 0), value)
+    for optimize_key in optimize.keys():
+        exclude[optimize_key] = 1
+    next_level = {key: hierarchy[key] for key in hierarchy.keys() if key not in exclude}
+    if len(next_level):
+        sub_hierarchy = get_resource_hierarchy(
+            processes, next_level, level + 1, exclude=exclude
+        )
+        hierarchy.update(sub_hierarchy)
+    return hierarchy
 
 
-def get_score(
+def run_individual(
     individual: List[dict[str, int]],
     processes,
     stock: dict[str, int],
-    optimize: List[str],
-    hierarchy: dict[str, List[str]],
-) -> float:
-
-    init_resources_count = sum(
-        stock.get(resource, 0) * hierarchy.get(resource, 0) for resource in stock.keys()
-    )
-    # init_resources_count = sum(stock.get(resource, 0) for resource in optimize)
+):
 
     total_time = 0
     i = 0
@@ -287,11 +266,22 @@ def get_score(
                     stock.get(produced_resource, 0) + amount_produced * real_amounts[n]
                 )
         total_time += time
+    return total_time, stock
+
+
+def get_score(
+    individual: tuple[List[dict[str, int]], tuple[float, dict[str, int]]],
+    stock: dict[str, int],
+    optimize: List[str],
+    hierarchy: dict[str, List[str]],
+) -> float:
+
+    init_resources_count = sum(stock.get(resource, 0) for resource in optimize)
+
+    total_time, new_stock = individual[1]
 
     # resources_count = sum(stock.get(resource, 0) for resource in optimize)
-    resources_count = sum(
-        stock.get(resource, 0) * hierarchy.get(resource, 0) for resource in stock.keys()
-    )
+    resources_count = sum(new_stock.get(resource, 0) for resource in optimize)
 
     resource_diff = resources_count - init_resources_count
 
@@ -299,6 +289,66 @@ def get_score(
         return resource_diff / total_time if total_time > 0 else 0
     else:
         return resource_diff
+
+
+def compare_scores(
+    individual1: tuple[List[dict[str, int]], tuple[float, dict[str, int]]],
+    individual2: tuple[List[dict[str, int]], tuple[float, dict[str, int]]],
+    stock: dict[str, int],
+    optimize: List[str],
+    hierarchy: dict[str, List[str]],
+):
+
+    init_resources_count = sum(
+        stock.get(resource, 0) * hierarchy.get(resource, 0) for resource in stock.keys()
+    )
+    init_optimize_count = sum(stock.get(resource, 0) for resource in optimize)
+
+    total_time1, stock1 = individual1[1]
+    total_time2, stock2 = individual2[1]
+
+    optimize_diff1 = (
+        sum(stock1.get(resource, 0) for resource in optimize) - init_optimize_count
+    )
+
+    optimize_diff2 = (
+        sum(stock2.get(resource, 0) for resource in optimize) - init_optimize_count
+    )
+
+    if "time" in optimize:
+        optimize_diff1 = optimize_diff1 / total_time1 if total_time1 > 0 else 0
+        optimize_diff2 = optimize_diff2 / total_time2 if total_time2 > 0 else 0
+
+        if optimize_diff1 == optimize_diff2:
+            optimize_diff1 *= total_time1
+            optimize_diff2 *= total_time2
+
+    if optimize_diff1 != optimize_diff2:
+        return optimize_diff1 - optimize_diff2
+    else:
+        resource_diff1 = (
+            sum(
+                stock1.get(resource, 0) * hierarchy.get(resource, 0)
+                for resource in stock1.keys()
+            )
+            - init_resources_count
+        )
+        resource_diff2 = (
+            sum(
+                stock2.get(resource, 0) * hierarchy.get(resource, 0)
+                for resource in stock2.keys()
+            )
+            - init_resources_count
+        )
+
+        if "time" in optimize:
+            resource_diff1 = resource_diff1 / total_time1 if total_time1 > 0 else 0
+            resource_diff2 = resource_diff2 / total_time2 if total_time2 > 0 else 0
+            if resource_diff1 == resource_diff2:
+                resource_diff1 *= total_time1
+                resource_diff2 *= total_time2
+
+        return resource_diff1 - resource_diff2
 
 
 def trim_invalid(
@@ -406,13 +456,31 @@ if __name__ == "__main__":
     max_chromosome_length = min(max_chromosome_length, 50000)
     max_gene_length = max(max_chromosome_length // 100, 1)
 
-    hierarchy = get_resource_hierarchy(processes, optimize)
-    # print("Hierarchy:", hierarchy)
+    hierarchy = get_resource_hierarchy(
+        processes, {opt: 1 for opt in optimize if opt != "time"}
+    )
+    for opt in optimize:
+        if opt in hierarchy:
+            del hierarchy[opt]
 
     def fitness_function(individual):
-        stock_copy = stock.copy()
+        return get_score(individual, stock.copy(), optimize, hierarchy)
 
-        return get_score(individual, processes, stock_copy, optimize, hierarchy)
+    def cmp_function(
+        individual1: List[dict[str, int]], individual2: List[dict[str, int]]
+    ):
+        return compare_scores(
+            individual1, individual2, stock.copy(), optimize, hierarchy
+        )
+
+    def get_extra_params(individual):
+        """
+        Get extra parameters for the individual.
+        """
+        individual_time, individual_stock = run_individual(
+            individual, processes, stock.copy()
+        )
+        return (individual_time, individual_stock)
 
     def init_population_with_sgs(pop_size):
         population = []
@@ -423,7 +491,7 @@ if __name__ == "__main__":
             individual = generate_random_individual(
                 processes, max_chromosome_length, min_gene_length, max_gene_length
             )
-            population.append(individual)
+            population.append((individual, get_extra_params(individual)))
 
         return population
 
@@ -437,17 +505,20 @@ if __name__ == "__main__":
         fitness_function=fitness_function,
         init_population=init_population_with_sgs,
         time_limit=max_execution_time,
-        parent_selection_type="tournament",
+        parent_selection_type="random",
         selection_pressure=2,
         tournament_probability=0.7,
         crossover_point="single",
         hyper_mutation_rate=0.005,
         hyper_change_frequency=3,
-        hyper_tournament_probability=0.2,
+        hyper_tournament_probability=0.5,
         hyper_selection_pressure=8,
         hyper_numb_generation=3,
         max_gene_length=max_gene_length,
         min_gene_length=min_gene_length,
+        cmp_function=cmp_function,
+        get_extra_params=get_extra_params,
+        # generations=1,
     )
 
     best, fitnesses = ga.run()
@@ -455,19 +526,26 @@ if __name__ == "__main__":
     fitness = ga.fitness_function(best)
     print("Best fitness:", fitness)
 
-    valid_best = trim_invalid(best, processes, stock.copy())
+    valid_best = trim_invalid(best[0], processes, stock.copy())
 
     now = datetime.now()
 
     current_time = now.strftime("%Y%m%d_%H:%M:%S")
 
     to_save = final_format(valid_best, processes, stock)
+    # print(stock, optimize)
+    # print(
+    #     compare_scores(
+    #         ("1", (30, {"energy": 45})),
+    #         ("2", (30, {"cell": 2})),
+    #         stock,
+    #         optimize,
+    #         hierarchy,
+    #     )
+    # )
     print("Save results? (y/n)")
     save = input()
-
     if save == "y":
-        folder_path = "../results"  # any depth you like
-        os.makedirs(folder_path, exist_ok=True)
         filename = (
             f"../results/{config_file.split('/')[-1]}_{fitness:.2f}_{current_time}.json"
         )
@@ -481,13 +559,11 @@ if __name__ == "__main__":
         print("Run verification? (y/n)")
         verify = input()
         if verify == "y":
-            pid = os.fork()
-            if pid == 0:  # child
-                os.execve(
-                    f"./krpsim_verif.py",
-                    ["./krpsim_verif.py", config_file, filename],
-                    {},
-                )
+            os.execve(
+                f"./krpsim_verif.py",
+                ["./krpsim_verif.py", config_file, filename],
+                {},
+            )
     plt.plot(fitnesses)
     plt.xlabel("Generation")
     plt.ylabel("Fitness")

@@ -3,6 +3,7 @@ import random
 import time
 import os
 import copy
+from functools import cmp_to_key
 
 
 class GeneticAlgorithm:
@@ -29,6 +30,8 @@ class GeneticAlgorithm:
         hyper_numb_generation=3,
         max_gene_length=1,
         min_gene_length=1,
+        cmp_function=None,
+        get_extra_params=None,
     ):
         self.population_size = population_size
         self.population = []
@@ -55,9 +58,16 @@ class GeneticAlgorithm:
         self.hyper_numb_generation = hyper_numb_generation
         self.max_gene_length = max_gene_length
         self.min_gene_length = min_gene_length
+        self.cmp_function = cmp_function
+        if cmp_function is None:
+            self.cmp_function = lambda x, y: (
+                self.fitness_function(x) - self.fitness_function(y)
+            )
+        self.get_extra_params = get_extra_params
 
     def sort_population(self):
-        self.population.sort(key=lambda x: x[1], reverse=True)
+
+        self.population.sort(key=cmp_to_key(self.cmp_function), reverse=True)
 
     def parent_selection(self):
         """Select the best individuals from the population."""
@@ -202,7 +212,7 @@ class GeneticAlgorithm:
         p = tournament_probability
         # Randomly choose k individuals
         tournament_contestants = random.sample(population, selection_pressure)
-        tournament_contestants.sort(key=lambda x: x[1], reverse=True)
+        tournament_contestants.sort(key=cmp_to_key(self.cmp_function), reverse=True)
         weights = [p * ((1 - p) ** i) for i in range(len(tournament_contestants))]
         return random.choices(population=tournament_contestants, k=1, weights=weights)[
             0
@@ -223,10 +233,10 @@ class GeneticAlgorithm:
             child_individual = self.crossover(parent1[0], parent2[0])
             child = (
                 child_individual,
-                self.fitness_function(child_individual),
+                self.get_extra_params(child_individual),
             )
         else:
-            child = max(parent1, parent2, key=lambda x: x[1])
+            child = max(parent1, parent2, key=cmp_to_key(self.cmp_function))
         return child
 
     def crossover_generation(self, population):
@@ -237,7 +247,6 @@ class GeneticAlgorithm:
         while len(crossover_population) < target_size:
 
             child = self.create_offspring(population)
-
             crossover_population.append(self.mutate(child))
 
         return crossover_population
@@ -273,18 +282,16 @@ class GeneticAlgorithm:
                 ]
 
         if mutated:
-            fitness = self.fitness_function(mutated_individual)
-            return mutated_individual, fitness
+            return mutated_individual, self.get_extra_params(mutated_individual)
         else:
             return individual
 
     def one_generation(self):
         self.sort_population()
 
-        if (
-            self.best_individual is not None
-            and self.population[0][1] == self.best_individual[1]
-        ):
+        if self.best_individual is not None and self.fitness_function(
+            self.population[0]
+        ) == self.fitness_function(self.best_individual):
             self.stagnation_count += 1
         else:
             self.stagnation_count = 0
@@ -298,17 +305,14 @@ class GeneticAlgorithm:
         elite_population = self.elite_selection()
 
         self.best_individual = self.population[0]
-        self.fitnesses.append(self.best_individual[1])
+        self.fitnesses.append(self.fitness_function(self.best_individual))
 
         crossover_population = self.crossover_generation(parent_population)
         self.population = crossover_population + elite_population
 
     def run(self):
         """Run the genetic algorithm."""
-        self.population = [
-            (individual, self.fitness_function(individual))
-            for individual in self.init_population(self.population_size)
-        ]
+        self.population = self.init_population(self.population_size)
         self.fitnesses = []
 
         if self.time_limit:
@@ -322,7 +326,7 @@ class GeneticAlgorithm:
                 if generations >= 1:
                     moveup = "\033[A"
                     print(moveup * int(len(message) / width + 1))
-                fitness = self.best_individual[1]
+                fitness = self.fitness_function(self.best_individual)
                 message = f"ETA {end - time.time():2.0f}s : Generation {generations:4.0f} | Best fitness {fitness:3.2f} "
                 print(message, end="\r")
                 generations += 1
@@ -331,10 +335,10 @@ class GeneticAlgorithm:
         else:
             for _ in ft_progress(range(self.generations)):
                 self.one_generation()
-        best = max(self.population, key=lambda x: x[1])
+        best = max(self.population, key=cmp_to_key(self.cmp_function))
 
-        self.fitnesses.append(best[1])
+        self.fitnesses.append(self.fitness_function(best))
         return (
-            best[0],
+            best,
             self.fitnesses,
         )  # Return the best individual
